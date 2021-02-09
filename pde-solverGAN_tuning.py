@@ -248,7 +248,9 @@ config = {
     'u_rate': tune.loguniform(0.001, 0.1),
     'v_rate': tune.loguniform(0.001, 0.1),
     'iteration': 4000,
-    'subiteration':10
+    'subiteration':10,
+    'u_factor': tune.loguniform(0.3,0.99999),
+    'v_factor':tune.loguniform(0.3,0.99999)
 }
 
 #     'u_rate': tune.loguniform(0.001, 0.1),
@@ -426,10 +428,6 @@ def train(config, checkpoint_dir=None):
     u_net = generator(config).to(device)
     v_net = discriminator(config).to(device)
     
-    
-    # optimizers for WAN
-    optimizer_u = torch.optim.Adam(u_net.parameters(), lr=config['u_rate'])
-    optimizer_v = torch.optim.Adam(v_net.parameters(), lr=config['v_rate'])
 
     #scheduler_u = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer_u, factor=0.5, patience=30)
     #scheduler_v = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer_v, factor=0.5, patience=30)
@@ -439,9 +437,15 @@ def train(config, checkpoint_dir=None):
 
     Loss = 0
     
-
             
     for k in range(iteration):
+        
+        # optimizers for WAN
+        optimizer_u = torch.optim.Adam(u_net.parameters(), lr=config['u_rate'])
+        optimizer_v = torch.optim.Adam(v_net.parameters(), lr=config['v_rate'])
+        
+        scheduler_u = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer_u, factor=config['u_factor'], patience=0)
+        scheduler_v = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer_v, factor=config['v_factor'], patience=0)
         
 #         if k==0:
 #                 if checkpoint_dir:
@@ -459,7 +463,7 @@ def train(config, checkpoint_dir=None):
                 optimizer_u.step()
             except TypeError:
                 print("this opt_u step is wrong")
-            #scheduler_u.step(loss_u)
+            scheduler_u.step(loss_u)
             prediction_u = u_net(xu, yu, tu)            
 
         for j in range(n2):
@@ -472,9 +476,11 @@ def train(config, checkpoint_dir=None):
             except TypeError:
                 print("this opt_v step is wrong")
                 
-            #scheduler_v.step(loss_v)
+            scheduler_v.step(loss_v)
             prediction_v = v_net(xv, yv, tv)
 #             print('v',k,i,torch.isnan(prediction_v).any()) #sanity check
+        
+        loss_u = Loss_u(prediction_u, prediction_v, u_net, 1, 1)        #this is to ensure that for our reported losses they are all scaled equally to avoid a bias away from large alpha
         Loss += 0.1*loss_u
 
         if k % nn == 0:
