@@ -402,7 +402,7 @@ def I(y_output_u, y_output_v, XV, X, ind, a=a, b=b,h=h, f=f, c=func_c):
     y_output_v.retain_grad()
     N = y_output_u.shape[0]
     phi = y_output_v * func_w(XV[0]).unsqueeze(2).repeat(1, t_mesh_size, 1)
-    y_output_u.backward(torch.ones_like(y_output_u), retain_graph=True)
+    y_output_u.backward(torch.ones_like(y_output_u).to(device), retain_graph=True)
     du = {}
     for i in range(dim):
         du['du_'+str(i)] = X[i].grad
