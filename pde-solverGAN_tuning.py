@@ -186,6 +186,10 @@ g = func_g(xt_boundary_train.clone().detach().to(device)).unsqueeze(2).to(device
 
 """# Defining the Model"""
 
+def init_weights(layer):
+    if type(layer) == torch.nn.Linear:
+        torch.nn.init.xavier_uniform_(layer.weight)
+        layer.bias.data.fill_(0)
 
 class generator(torch.nn.Module):  # this makes the u function
 
@@ -428,6 +432,8 @@ def train(config, checkpoint_dir=None):
     u_net = generator(config).to(device)
     v_net = discriminator(config).to(device)
     
+    u_net.apply(init_weights)
+    v_net.apply(init_weights)
 
     #scheduler_u = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer_u, factor=0.5, patience=30)
     #scheduler_v = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer_v, factor=0.5, patience=30)
