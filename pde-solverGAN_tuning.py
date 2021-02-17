@@ -362,7 +362,7 @@ def I(y_output_u, y_output_v, XV, X, a=a, b=b,h=h, f=f, c=func_c):
 #     return torch.mean((y_output_u[:, 0, 0] - func_h(xt_domain_train[:, :2, 0])) ** 2)
 
 def L_init(y_output_u, h=h):
-    return torch.mean((y_output_u[:, 0, :] - h) ** 2)
+    return torch.mean((y_output_u[:, 0, :].squeeze(1) - h) ** 2)
 
 def L_bdry(u_net, g=g):
     return torch.mean((u_net(xt_boundary_train[:, 0, :], xt_boundary_train[:, 1, :], xt_boundary_train[:, 2, :]) - g) ** 2)
