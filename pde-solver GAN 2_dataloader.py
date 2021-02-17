@@ -16,6 +16,8 @@ import numpy as np
 from itertools import product
 from torch.utils.data import DataLoader
 
+
+
 """# Exact solution u(x) for the example PDE
 we conduct a experiment on solving a IBVP with nonlinear diffusion-reaction equation and boundary condition involving time:
 \begin{equation}
@@ -407,7 +409,7 @@ def Loss_v(y_output_u, y_output_v, XV, X, ind):
 
 """# Training"""
 
-iteration = 10000
+iteration = 4000
 
 x_mesh = torch.linspace(0, 1, 50, requires_grad=True)
 mesh1, mesh2 = torch.meshgrid(x_mesh, x_mesh)
