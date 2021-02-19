@@ -50,7 +50,7 @@ print(torch.cuda.is_available())
 
 def func_u_sol(xt):
     l = xt.shape[0]
-    u = 2 * torch.sin(math.pi / 2 * xt[:, 0, :]) * torch.cos(math.pi / 2 * xt[:, 1, :]) * torch.exp(xt[:, 2, :])
+    u = 2 * torch.sin(math.pi / 2 * xt[:, 0, :]) * torch.cos(math.pi / 2 * xt[:, 1, :]) * torch.exp(-xt[:, 2, :])
     return(u)
 
 # We denote spatial coordinates with time as 'xt' and 'x' without
@@ -89,9 +89,9 @@ T = 1
 up = 1.0
 down = -1.0
 dim = 2
-domain_sample_size = 1000  # 25000
-t_mesh_size = 11
-boundary_sample_size = 40  # 250
+domain_sample_size = 8000  # 25000
+t_mesh_size = 10
+boundary_sample_size = 160  # 250
 num_workers = 4
 
 assert domain_sample_size%num_workers==0 & 4*boundary_sample_size%num_workers==0, "To make the dataloader work num_workers needs to divide the size of the domain and boundary samples"
@@ -296,19 +296,19 @@ class discriminator(torch.nn.Module):  # this makes the v function
 
 # Wu Hyperparameters 2
 config = {
-    'alpha': 1e5,
+    'alpha': 1e5*40*4,
     'u_layers': 7,
     'u_hidden_dim': 20,
-    'v_layers': 7,
+    'v_layers': 9,
     'v_hidden_dim': 50,
     'n1': 10,
     'n2': 5,
-    'u_rate': 0.0015,
-    'v_rate': 0.05,
+    'u_rate': 0.04,
+    'v_rate': 0.015,
     'u_factor': 0.8,
     'v_factor':0.95
 }
-'''
+''' 
 # Wu Hyperparameters
 config = {
     'alpha': 17.855455840300866,
@@ -406,7 +406,7 @@ def I(y_output_u, y_output_v, XV, X, ind, a=a, b=b,h=h, f=f, c=func_c):
     du = {}
     for i in range(dim):
         du['du_'+str(i)] = X[i].grad
-    phi.backward(torch.ones_like(phi), retain_graph=True)
+    phi.backward(torch.ones_like(phi).to(device), retain_graph=True)
     dphi = {}
     for i in range(dim+1):
         dphi['dphi_'+str(i)] = XV[i].grad
@@ -428,7 +428,8 @@ def I(y_output_u, y_output_v, XV, X, ind, a=a, b=b,h=h, f=f, c=func_c):
 
 
 def L_init(y_output_u, ind, h=h):
-    return torch.mean((y_output_u[:, 0, :] - h) ** 2)
+    N = y_output_u.shape[0]
+    return torch.mean((y_output_u[:, 0, :].squeeze(1) - h[ind*N:(ind+1)*N]) ** 2)
 
 
 def L_bdry(u_net, xt_boundary_train, ind, g=g):
@@ -457,7 +458,7 @@ mesh1, mesh2 = torch.meshgrid(x_mesh, x_mesh)
 mesh_1= torch.reshape(mesh1, [-1,1])
 mesh_2= torch.reshape(mesh2, [-1,1])
 t = torch.ones(2500, 1)
-xt_test = torch.cat((mesh_1, mesh_2, t), dim = 1).unsqueeze(2)
+xt_test = torch.cat((mesh_1, mesh_2, t), dim = 1).unsqueeze(2).to(device)
 
 EarlyStop = EarlyStopping(patience=1, delta=10) #the delta is the maximum divergence that we will allow from our best average solution
 
@@ -538,6 +539,12 @@ def train(config, checkpoint_dir=None):
             if EarlyStop.early_stop == True:
                 break
             Loss = 0
+
+            plt.clf()
+            plt.plot(func_u_sol(xt_test).data.numpy())
+            plt.plot(u_net(xt_test[:, 0, 0].unsqueeze(1), xt_test[:, 1, 0].unsqueeze(1),
+                           xt_test[:, 2, 0].unsqueeze(1)).squeeze(2).data.numpy())
+            plt.savefig('plot at ' + str(k) + '.png')
             ''' 
                 with tune.checkpoint_dir(k) as checkpoint_dir:
                     path = os.path.join(checkpoint_dir, "checkpoint")
