@@ -47,7 +47,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 def func_u_sol(xt):
     l = xt.shape[0]
-    u = 2 * torch.sin(math.pi / 2 * xt[:, 0, :]) * torch.cos(math.pi / 2 * xt[:, 1, :]) * torch.exp(xt[:, 2, :])
+    u = 2 * torch.sin(math.pi / 2 * xt[:, 0, :]) * torch.cos(math.pi / 2 * xt[:, 1, :]) * torch.exp(-xt[:, 2, :])
     return(u)
 
 
