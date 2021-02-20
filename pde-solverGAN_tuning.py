@@ -369,7 +369,7 @@ def L_init(y_output_u, h=h):
     return torch.mean((y_output_u[:, 0, :].squeeze(1) - h) ** 2)
 
 def L_bdry(u_net, g=g):
-    return torch.mean((u_net(xt_boundary_train[:, 0, :], xt_boundary_train[:, 1, :], xt_boundary_train[:, 2, :]) - g) ** 2)
+    return torch.mean((u_net(xt_boundary_train[:, 0, :].requires_grad_(True), xt_boundary_train[:, 1, :].requires_grad_(True), xt_boundary_train[:, 2, :].requires_grad_(True)) - g) ** 2)
 
 # def L_bdry(u_net):
 #     return torch.mean((u_net(xt_boundary_train[:, 0, :], xt_boundary_train[:, 1, :], xt_boundary_train[:, 2, :]) -
