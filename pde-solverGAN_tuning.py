@@ -56,7 +56,7 @@ def func_u_sol(xt):
 def func_f(xt):
     l = xt.shape[0]
     f = (math.pi ** 2 - 2) * torch.sin(math.pi / 2 * xt[:, 0, :]) * torch.cos(math.pi / 2 * xt[:, 1, :]) * torch.exp(
-        -xt[:, 2, :]) - 4 * torch.sin(math.pi / 2 * xt[:, 0, :]) ** 2 * (torch.cos(math.pi / 2 * xt[:, 1, :]) **2)* torch.exp(-xt[:, 2, :])
+        -xt[:, 2, :]) - 4 * torch.sin(math.pi / 2 * xt[:, 0, :]) ** 2 * (torch.cos(math.pi / 2 * xt[:, 1, :]) **2)* torch.exp(-2*xt[:, 2, :])
     return(f)
 
 
