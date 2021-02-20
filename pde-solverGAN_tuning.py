@@ -317,7 +317,7 @@ def I(y_output_u, y_output_v, XV, X, a=a, b=b,h=h, f=f, c=func_c):
     dphi = {}
     for i in range(dim+1):
         dphi['dphi_'+str(i)] = XV[i].grad
-    s1 = y_output_u[:, -1, :].squeeze(1) * phi[:, -1, :].squeeze(1) - h
+    s1 = y_output_u[:, -1, :].squeeze(1) * phi[:, -1, :].squeeze(1) - h * phi[:, 0, :].squeeze(1)
     s2 = (y_output_u * dphi['dphi_2'].unsqueeze(2))/t_mesh_size  # for t does this make sense?
     s31 = 0
     for i,j in product(range(dim), repeat=2):
