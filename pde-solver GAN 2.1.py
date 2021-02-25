@@ -16,8 +16,9 @@ import numpy as np
 from Earlystop import EarlyStopping
 from itertools import product
 from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
 
-
+writer = SummaryWriter()
 
 """# Exact solution u(x) for the example PDE
 we conduct a experiment on solving a IBVP with nonlinear diffusion-reaction equation and boundary condition involving time:
@@ -33,13 +34,38 @@ where $\Omega=(-1,1)^{2} \subset \mathbb{R}^{2}$. In this test, we give the defi
 # PDE Setup
 """
 
-'''
+#'''
 # I use this to get the shape of the tensor when I debug
 old_repr = torch.Tensor.__repr__
 def tensor_info(tensor):
     return repr(tensor.shape)[6:] + ' ' + repr(tensor.dtype)[6:] + '@' + str(tensor.device) + '\n' + old_repr(tensor)
 torch.Tensor.__repr__ = tensor_info
 #'''
+
+def plot_grad_flow(named_parameters):
+    '''Plots the gradients flowing through different layers in the net during training.
+    Can be used for checking for possible gradient vanishing / exploding problems.
+
+    Usage: Plug this function in Trainer class after loss.backwards() as
+    "plot_grad_flow(self.model.named_parameters())" to visualize the gradient flow'''
+    ave_grads = []
+    max_grads = []
+    layers = []
+    for n, p in named_parameters:
+        if (p.requires_grad) and ("bias" not in n):
+            layers.append(n)
+            ave_grads.append(p.grad.abs().mean())
+            max_grads.append(p.grad.abs().max())
+    plt.bar(np.arange(len(max_grads)), max_grads, alpha=0.1, lw=1, color="c")
+    plt.bar(np.arange(len(max_grads)), ave_grads, alpha=0.1, lw=1, color="b")
+    plt.hlines(0, 0, len(ave_grads) + 1, lw=2, color="k")
+    plt.xticks(range(0, len(ave_grads), 1), layers, rotation="vertical")
+    plt.xlim(left=0, right=len(ave_grads))
+    plt.ylim(bottom=-0.001, top=0.002)  # zoom in on the lower gradient regions
+    plt.xlabel("Layers")
+    plt.ylabel("average gradient")
+    plt.title("Gradient flow")
+    plt.show()
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -58,7 +84,7 @@ def func_u_sol(xt):
 def func_f(xt):
     l = xt.shape[0]
     f = (math.pi ** 2 - 2) * torch.sin(math.pi / 2 * xt[:, 0, :]) * torch.cos(math.pi / 2 * xt[:, 1, :]) * torch.exp(
-        -xt[:, 2, :]) - 4 * torch.sin(math.pi / 2 * xt[:, 0, :]) ** 2 * torch.cos(math.pi / 2 * xt[:, 1, :]) ** 2 * torch.exp(-xt[:, 2, :])
+        -xt[:, 2, :]) - 4 * torch.sin(math.pi / 2 * xt[:, 0, :]) ** 2 * torch.cos(math.pi / 2 * xt[:, 1, :]) ** 2 * torch.exp(-2*xt[:, 2, :])
     return(f)
 
 
@@ -92,20 +118,19 @@ dim = 2
 domain_sample_size = 8000  # 25000
 t_mesh_size = 10
 boundary_sample_size = 160  # 250
-num_workers = 4
+num_workers = 1
 
 assert domain_sample_size%num_workers==0 & 4*boundary_sample_size%num_workers==0, "To make the dataloader work num_workers needs to divide the size of the domain and boundary samples"
 
 # defining the training domain
 x0_domain = torch.Tensor(domain_sample_size, dim).uniform_(down, up)
-x0_domain.requires_grad_()
 
 x_domain_train = x0_domain.unsqueeze(2).repeat(1, 1, t_mesh_size)
 
 t = torch.linspace(T0, T, t_mesh_size).unsqueeze(1).unsqueeze(2).view(1, 1, t_mesh_size).repeat(domain_sample_size, 1, 1)
 xt_domain_train = torch.cat((x_domain_train, t), dim=1)
 
-xt_domain_train = xt_domain_train.to(device)
+xt_domain_train = xt_domain_train.requires_grad_().to(device)
 
 # defining the training boundary
 x0_boundary_side = torch.Tensor(boundary_sample_size, dim - 1).uniform_(down, up)
@@ -122,51 +147,17 @@ x_boundary_train = x0_boundary.unsqueeze(2).repeat(1, 1, t_mesh_size)
 xt_boundary_train = torch.cat((x_boundary_train, t[:4*boundary_sample_size, :, :]), dim=1)
 xt_boundary_train = xt_boundary_train.detach().to(device)
 
-
-# Validation data Sets
-val_domain_size = int(domain_sample_size * 0.3)
-val_boundary_size = int(boundary_sample_size * 0.3)
-
-x0_domain_val = torch.Tensor(val_domain_size, dim).uniform_(down, up)
-x0_domain_val.requires_grad_()
-
-x_domain_val = x0_domain_val.unsqueeze(2).repeat(1, 1, t_mesh_size)
-xt_domain_val = torch.cat((x_domain_val, t[:val_domain_size, :, :]), dim=1).to(device)
-
-# defining the validation boundary
-x0_boundary_side = torch.Tensor(val_boundary_size, dim - 1).uniform_(down, up)
-x0_boundary_side.requires_grad_()
-
-x0_boundary_left = torch.cat((torch.ones(x0_boundary_side.size()) * down, x0_boundary_side), 1)
-x0_boundary_right = torch.cat((torch.ones(x0_boundary_side.size()) * up, x0_boundary_side), 1)
-x0_boundary_down = torch.cat((x0_boundary_side, torch.ones(x0_boundary_side.size()) * down), 1)
-x0_boundary_up = torch.cat((x0_boundary_side, torch.ones(x0_boundary_side.size()) * up), 1)
-
-x0_boundary = torch.cat((x0_boundary_left, x0_boundary_right, x0_boundary_down, x0_boundary_up), 0)
-
-x_boundary_val = x0_boundary.unsqueeze(2).repeat(1, 1, t_mesh_size)
-xt_boundary_val = torch.cat((x_boundary_val, t[:4*val_boundary_size, :, :]), dim=1).to(device)
-
 xv = xt_domain_train[:, 0, :].clone().detach()
 yv = xt_domain_train[:, 1, :].clone().detach()
 tv = xt_domain_train[:, 2, :].clone().detach()
-'''
-xv = xv.requires_grad_(True).to(device)
-yv = yv.requires_grad_(True).to(device)
-tv = tv.requires_grad_(True).to(device)
-'''
+
 xu = xv.clone().detach()
 yu = yv.clone().detach()
 tu = tv.clone().detach()
 
-x_error = xv.clone().detach()
-y_error = yv.clone().detach()
-t_error = tv.clone().detach()
-'''
-xu.requires_grad_(True).to(device)
-yu.requires_grad_(True).to(device)
-tu.requires_grad_(True).to(device)
-'''
+x_error = xu.clone().detach().requires_grad_(True).to(device)
+y_error = yu.clone().detach().requires_grad_(True).to(device)
+t_error = tu.clone().detach().requires_grad_(True).to(device)
 
 X = [xu, yu, tu]
 XV = [xv, yv, tv]
@@ -203,9 +194,9 @@ class Comb_loader(Dataset):
 data = Comb_loader(X, XV, xt_boundary_train)
 ds = DataLoader(data, num_workers=num_workers)
 
-x_val = xt_domain_val[:, 0, :].clone().detach().requires_grad_(True).to(device)
-y_val = xt_domain_val[:, 1, :].clone().detach().requires_grad_(True).to(device)
-t_val = xt_domain_val[:, 2, :].clone().detach().requires_grad_(True).to(device)
+#x_val = xt_domain_val[:, 0, :].clone().detach().requires_grad_(True).to(device)
+#y_val = xt_domain_val[:, 1, :].clone().detach().requires_grad_(True).to(device)
+#t_val = xt_domain_val[:, 2, :].clone().detach().requires_grad_(True).to(device)
 
 # this is meant to be a d by d-dimensional array containing domain_sample_size by t_mesh_size by 1 tensors
 a1, a2 = torch.cat((torch.ones(1, 1, domain_sample_size, t_mesh_size, 1), torch.zeros(1, 1, domain_sample_size, t_mesh_size, 1)), dim=1), torch.cat((torch.zeros(1, 1, domain_sample_size, t_mesh_size, 1), torch.ones(1, 1, domain_sample_size, t_mesh_size, 1)), dim=1)
@@ -214,14 +205,8 @@ a = torch.cat((a1, a2), dim=0).to(device)
 # this is meant to be a d-dimensional containing domain_sample_size by t_mesh_size by 1 tensors
 b = torch.cat((torch.zeros(1, domain_sample_size, t_mesh_size, 1), torch.zeros(1, domain_sample_size, t_mesh_size, 1)), dim=0).to(device)
 
-x_setup = xv.clone().detach().to(device)
-y_setup = yv.clone().detach().to(device)
-t_setup = tv.clone().detach().to(device)
-
-xyt_setup = torch.cat((x_setup.unsqueeze(2).view(-1, 1, t_mesh_size), y_setup.unsqueeze(2).view(-1, 1, t_mesh_size), t_setup.unsqueeze(2).view(-1, 1, t_mesh_size)), dim=1)
-
-h = func_h(xyt_setup[:, :, 0]).to(device)
-f = func_f(xyt_setup).to(device)
+h = func_h(x0_domain.clone().detach().to(device)).to(device)
+f = func_f(xt_domain_train.clone().detach().to(device)).to(device)
 g = func_g(xt_boundary_train.clone().detach().to(device)).unsqueeze(2).to(device)
 
 """# Defining the Model"""
@@ -294,9 +279,9 @@ class discriminator(torch.nn.Module):  # this makes the v function
         return (self.loss)
 
 
-# Wu Hyperparameters 2
+# Paper Hyperparameters
 config = {
-    'alpha': 1e5*40*4,
+    'alpha': 1e2*40*4,
     'u_layers': 7,
     'u_hidden_dim': 20,
     'v_layers': 9,
@@ -401,7 +386,7 @@ def I(y_output_u, y_output_v, XV, X, ind, a=a, b=b,h=h, f=f, c=func_c):
     y_output_u.retain_grad()
     y_output_v.retain_grad()
     N = y_output_u.shape[0]
-    phi = y_output_v * func_w(XV[0]).unsqueeze(2).repeat(1, t_mesh_size, 1)
+    phi = y_output_v * func_w(XV[0]).unsqueeze(2).repeat(1, t_mesh_size, 1) * func_w(XV[1]).unsqueeze(2).repeat(1, t_mesh_size, 1)
     y_output_u.backward(torch.ones_like(y_output_u).to(device), retain_graph=True)
     du = {}
     for i in range(dim):
@@ -410,8 +395,8 @@ def I(y_output_u, y_output_v, XV, X, ind, a=a, b=b,h=h, f=f, c=func_c):
     dphi = {}
     for i in range(dim+1):
         dphi['dphi_'+str(i)] = XV[i].grad
-    s1 = y_output_u[:, -1, :].squeeze(1) * phi[:, -1, :].squeeze(1) - h[ind*N:(ind+1)*N]
-    s2 = (y_output_u * dphi['dphi_2'].unsqueeze(2))/t_mesh_size  # for t does this make sense?
+    s1 = y_output_u[:, -1, :].squeeze(1) * phi[:, -1, :].squeeze(1) - h[ind*N:(ind+1)*N] * phi[:, 0, :].squeeze(1)
+    s2 = (T-T0)*(y_output_u * dphi['dphi_2'].unsqueeze(2))/t_mesh_size  # for t does this make sense?
     s31 = 0
     for i,j in product(range(dim), repeat=2):
         s31 += a[i, j, ind*N:(ind+1)*N, :, :] * dphi['dphi_'+str(i)].unsqueeze(2) * du['du_'+str(j)].unsqueeze(2)
@@ -433,7 +418,7 @@ def L_init(y_output_u, ind, h=h):
 
 
 def L_bdry(u_net, xt_boundary_train, ind, g=g):
-    return torch.mean((u_net(xt_boundary_train[:, 0, :], xt_boundary_train[:, 1, :], xt_boundary_train[:, 2, :]) - g) ** 2)
+    return torch.mean((u_net(xt_boundary_train[:, 0, :].requires_grad_(True), xt_boundary_train[:, 1, :].requires_grad_(True), xt_boundary_train[:, 2, :].requires_grad_(True)) - g) ** 2)
 
 
 def L_int(y_output_u, y_output_v, XV, X, ind):
@@ -442,7 +427,8 @@ def L_int(y_output_u, y_output_v, XV, X, ind):
 
 
 def Loss_u(y_output_u, y_output_v, u_net, alpha, gamma, xt_boundary_train, XV, X, ind):
-    return L_int(y_output_u, y_output_v, XV, X, ind) + gamma * L_init(y_output_u, ind) + alpha * L_bdry(u_net, xt_boundary_train, ind)
+    return L_int(y_output_u, y_output_v, XV, X, ind) + gamma * L_init(y_output_u, ind) + \
+           alpha * L_bdry(u_net, xt_boundary_train, ind)
 
 def Loss_v(y_output_u, y_output_v, XV, X, ind):
     return -L_int(y_output_u, y_output_v, XV, X, ind)
@@ -451,7 +437,7 @@ def Loss_v(y_output_u, y_output_v, XV, X, ind):
 
 """# Training"""
 
-iteration = 4000
+iteration = 101
 
 x_mesh = torch.linspace(0, 1, 50, requires_grad=True)
 mesh1, mesh2 = torch.meshgrid(x_mesh, x_mesh)
@@ -495,9 +481,14 @@ def train(config, checkpoint_dir=None):
                 prediction_v = v_net(xv, yv, tv)
                 prediction_u = u_net(xu, yu, tu)
                 loss_u = Loss_u(prediction_u, prediction_v, u_net, config['alpha'], config['alpha'], xt_boundary_train, XV, X, ind)
+                writer.add_scalar("Loss", loss_u, k)
                 optimizer_u.zero_grad()
                 loss_u.backward(retain_graph=True)
                 optimizer_u.step()
+                for tag, param in u_net.named_parameters():
+                    writer.add_histogram(tag, param.grad.data.numpy(), k)
+                #.grad
+                #plot_grad_flow(u_net.named_parameters())
                 #print('learning rate: ', optimizer_u.param_groups[0]['lr'])
                 scheduler_u.step(loss_u)
 
@@ -517,9 +508,9 @@ def train(config, checkpoint_dir=None):
                 optimizer_v.step()
                 scheduler_v.step(loss_v)
 
-        prediction_v = v_net(x_val, y_val, t_val)
-        prediction_u = u_net(x_val, y_val, t_val)
-        loss_u = Loss_u(prediction_u, prediction_v, u_net, 1, 1, xt_boundary_train, [x_val, y_val, t_val], [x_val, y_val, t_val], 0)
+        prediction_v = v_net(x_error, y_error, t_error)
+        prediction_u = u_net(x_error, y_error, t_error)
+        loss_u = Loss_u(prediction_u, prediction_v, u_net, 1, 1, xt_boundary_train, [x_error, y_error, t_error], [x_error, y_error, t_error], 0)
         Loss += 0.1*loss_u.data
 
         if k % 10 == 0:
@@ -534,6 +525,10 @@ def train(config, checkpoint_dir=None):
             error_test = torch.mean(
                 torch.sqrt(torch.square((func_u_sol(xt_domain_train) - prediction_u.data.squeeze(2))))).data
             print("error test " + str(error_test))
+            writer.add_scalar("mae", error_test, k)
+            writer.add_graph(u_net, input_to_model=(x_error, y_error, t_error))
+            writer.add_graph(v_net, input_to_model=(x_error, y_error, t_error))
+            writer.flush()
             if k != 0:
                 EarlyStop(Loss, u_net)
             if EarlyStop.early_stop == True:
@@ -541,9 +536,32 @@ def train(config, checkpoint_dir=None):
             Loss = 0
 
             plt.clf()
-            plt.plot(func_u_sol(xt_test).data.numpy())
-            plt.plot(u_net(xt_test[:, 0, 0].unsqueeze(1), xt_test[:, 1, 0].unsqueeze(1),
-                           xt_test[:, 2, 0].unsqueeze(1)).squeeze(2).data.numpy())
+
+            x_mesh = torch.linspace(down, up, 500).to(device)
+            mesh1, mesh2 = torch.meshgrid(x_mesh, x_mesh)
+            mesh_1_, mesh_2_ = mesh1.reshape(-1,1), mesh2.reshape(-1,1)
+            mesh_1_, mesh_2_ = mesh_1_.requires_grad_(True), mesh_2_.requires_grad_(True)
+            t1 = torch.ones(250000).unsqueeze(1).requires_grad_(True)
+            xt_test = torch.cat((mesh_1_, mesh_2_, t1), dim=1)
+            net = u_net(mesh_1_, mesh_2_, t1)
+            #net.backward(torch.ones_like(net).to(device))
+            t2 = 0.5 * t1
+            net2 = u_net(mesh_1_, mesh_2_, t2)
+            xt_test2 = torch.cat((mesh_1_, mesh_2_, t2), dim=1)
+
+            fig, ax = plt.subplots(4)
+            cset = ax[0].contourf(mesh1.squeeze(1).data.numpy(), mesh2.squeeze(1).data.numpy(), func_u_sol(xt_test.unsqueeze(2)).view(500,500).data.numpy(), 500, cmap='terrain')
+            dset = ax[1].contourf(mesh1.data.numpy(), mesh2.data.numpy(), net.squeeze(2).view(500,500).data.numpy(), 500, cmap='terrain')
+            #eset = ax[2].contourf(mesh1.data.numpy(), mesh2.data.numpy(), mesh_1_.grad.view(500,500).data.numpy(), 500, cmap='winter')
+            fset = ax[2].contourf(mesh1.squeeze(1).data.numpy(), mesh2.squeeze(1).data.numpy(), func_u_sol(xt_test2.unsqueeze(2)).view(500,500).data.numpy(), 500, cmap='terrain')
+            eset = ax[3].contourf(mesh1.data.numpy(), mesh2.data.numpy(), net2.squeeze(2).view(500, 500).data.numpy(),
+                                  500, cmap='terrain')
+            fig.colorbar(cset, ax=ax[0])
+            ax[0].set_title('Correct Solution and Guess at t=1 and t=0.5')
+            fig.colorbar(dset, ax=ax[1])
+            fig.colorbar(fset, ax=ax[2])
+            fig.colorbar(eset, ax=ax[3])
+            plt.show()
             plt.savefig('plot at ' + str(k) + '.png')
             ''' 
                 with tune.checkpoint_dir(k) as checkpoint_dir:
@@ -555,13 +573,12 @@ def train(config, checkpoint_dir=None):
 
             #torch.save(u_net.state_dict(), PATHg)
             #torch.save(v_net.state_dict(), PATHd)
-
-
-        #error_test = torch.mean(torch.sqrt(torch.square((func_u_sol(xt_domain_train) - prediction_u.data.squeeze(2))))).data
-        error_test = torch.mean(torch.sqrt(torch.square(func_u_sol(xt_domain_val)-u_net(x_val, y_val, t_val).data.squeeze(2))))
-        #print(error_test)
-        #tune.report(Loss=float(loss_u.detach().numpy()))
         '''
+            x_error.grad.data.zero_()
+            y_error.grad.data.zero_()
+            t_error.grad.data.zero_()
+
+
 
 
 
