@@ -6,6 +6,10 @@ This contains a model class for NeuralRDEs that wraps `rdeint` as a `nn.Module` 
 from torch import nn
 from rdeint import rdeint
 
+def init_weights(layer):
+    if type(layer) == nn.Linear:
+        nn.init.xavier_uniform_(layer.weight)
+        layer.bias.data.fill_(0)
 
 class NeuralRDE(nn.Module):
     """The generic module for learning with Neural RDEs.
@@ -61,6 +65,7 @@ class NeuralRDE(nn.Module):
 
         # The net applied to h_prev
         self.func = _NRDEFunc(hidden_dim, logsig_dim, hidden_dim=hidden_hidden_dim, num_layers=num_layers)
+        self.func.apply(init_weights)
 
         # Linear classifier to apply to final layer
         self.final_linear = nn.Linear(self.hidden_dim, self.output_dim) if apply_final_linear else lambda x: x
