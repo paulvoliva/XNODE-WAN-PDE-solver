@@ -507,7 +507,7 @@ grace_period=config['iteration']// config['subiteration']+1
 #grace_period=20
 analysis = tune.run(
     train,
-    num_samples=3,
+    num_samples=100,
     scheduler=ASHAScheduler(metric="loss", mode="min",  grace_period=grace_period, max_t=20*grace_period, reduction_factor=4),#
     config=config,
     verbose=2,
