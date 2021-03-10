@@ -252,7 +252,7 @@ config = {
     'n2': 5,  # tune.sample_from(lambda spec: int(spec.config.n1/2)),
     'u_rate': tune.choice([0.0005,0.001,0.0015,0.003,0.005,0.01,0.02,0.05]),# 0.02,
     'v_rate':  tune.choice([0.0005,0.001,0.0015,0.003,0.005,0.01,0.02,0.05]),#0.0015,
-    'iteration': 1000,
+    'iteration': 20000,
     'subiteration':10,
     'u_factor':tune.choice([0.7,0.8,0.9,0.95]),# 0.9,#tune.choice([0.7,0.8,0.9,0.95]),
     'v_factor':tune.choice([0.7,0.8,0.9,0.95]) #0.95 #tune.choice([0.7,0.8,0.9,0.95])
