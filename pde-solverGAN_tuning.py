@@ -38,7 +38,7 @@ def tensor_info(tensor):
 torch.Tensor.__repr__ = tensor_info
 #'''
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "1,2,3"
+os.environ["CUDA_VISIBLE_DEVICES"] = "3,2,1"
 print(os.environ["CUDA_VISIBLE_DEVICES"])
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -186,6 +186,7 @@ g = func_g(xt_boundary_train.clone().detach().to(device)).unsqueeze(2).to(device
 
 """# Defining the Model"""
 
+
 def init_weights(layer):
     if type(layer) == torch.nn.Linear:
         torch.nn.init.xavier_uniform_(layer.weight)
@@ -214,7 +215,6 @@ class generator(torch.nn.Module):  # this makes the u function
         return x
 
 
-
 class discriminator(torch.nn.Module):  # this makes the v function
 
     def __init__(self, config):
@@ -241,7 +241,8 @@ class discriminator(torch.nn.Module):  # this makes the v function
 
 #Serach space based on the WAN Paper
 config = {
-    'alpha': tune.loguniform(1e1, 1e5),
+    'alpha':tune.choice(2**torch.arange(30)[20:]),
+    #tune.choice(5**2,5,50,10**2,5*10**2,10**3,5*10**3,10**4,5*10**4,10**5,5*10**5,10**6,5*10**6,10**7]),
     #'gamma': tune.loguniform(1e1, 1e5), #tune.uniform(10, 50),#tune.loguniform(1e1, 1e5),#tune.loguniform(1e3, 1e7),
     'u_layers': 7,
     'u_hidden_dim': 20,
@@ -249,22 +250,14 @@ config = {
     'v_hidden_dim': 50,
     'n1': 10,  # tune.choice([2, 4, 6, 8, 10, 14, 20]),
     'n2': 5,  # tune.sample_from(lambda spec: int(spec.config.n1/2)),
-    'u_rate': tune.loguniform(0.001, 0.1),
-    'v_rate': tune.loguniform(0.001, 0.1),
-    'iteration': 4000,
+    'u_rate': tune.choice([0.0005,0.001,0.0015,0.003,0.005,0.01,0.02,0.05]),# 0.02,
+    'v_rate':  tune.choice([0.0005,0.001,0.0015,0.003,0.005,0.01,0.02,0.05]),#0.0015,
+    'iteration': 1000,
     'subiteration':10,
-    'u_factor': tune.loguniform(0.3,0.99999),
-    'v_factor':tune.loguniform(0.3,0.99999)
+    'u_factor':tune.choice([0.7,0.8,0.9,0.95]),# 0.9,#tune.choice([0.7,0.8,0.9,0.95]),
+    'v_factor':tune.choice([0.7,0.8,0.9,0.95]) #0.95 #tune.choice([0.7,0.8,0.9,0.95])
 }
 
-#     'u_rate': tune.loguniform(0.001, 0.1),
-#     'v_rate': tune.loguniform(0.001, 0.1)
-# ------+------------+-----------|
-# | train_57c1d_00000 | RUNNING  |       | 0.00420757 | 0.0063911 |
-
-#     'u_rate': tune.loguniform(0.002, 0.1),
-#     'v_rate': tune.loguniform(0.001, 0.1)
-# | train_9a821_00000 | RUNNING  |       | 0.0160603 | 0.00142824
 '''
 #Original WAN paper
 config = {
@@ -305,12 +298,15 @@ config = {
 
 """# Loss Function"""
 
+
 def I(y_output_u, y_output_v, XV, X, a=a, b=b,h=h, f=f, c=func_c):
+
     y_output_u.retain_grad()
     y_output_v.retain_grad()
-    phi = y_output_v * func_w(xv).unsqueeze(2).repeat(1, t_mesh_size, 1)
+    phi = y_output_v * func_w(XV[0]).unsqueeze(2).repeat(1, t_mesh_size, 1)
     y_output_u.backward(torch.ones_like(y_output_u).to(device), retain_graph=True)
     du = {}
+ 
     for i in range(dim):
         du['du_'+str(i)] = X[i].grad
     phi.backward(torch.ones_like(phi).to(device), retain_graph=True)
@@ -318,8 +314,9 @@ def I(y_output_u, y_output_v, XV, X, a=a, b=b,h=h, f=f, c=func_c):
     for i in range(dim+1):
         dphi['dphi_'+str(i)] = XV[i].grad
     s1 = y_output_u[:, -1, :].squeeze(1) * phi[:, -1, :].squeeze(1) - h * phi[:, 0, :].squeeze(1)
-    s2 = (T-T0)*(y_output_u * dphi['dphi_2'].unsqueeze(2))/t_mesh_size  # for t does this make sense?
+    s2 = (T-T0)*(y_output_u * dphi['dphi_2'].unsqueeze(2))/t_mesh_size  # for t does this make sense? 
     s31 = 0
+    
     for i,j in product(range(dim), repeat=2):
         s31 += a[i, j, :, :, :] * dphi['dphi_'+str(i)].unsqueeze(2) * du['du_'+str(j)].unsqueeze(2)
     s32 = 0
@@ -333,38 +330,6 @@ def I(y_output_u, y_output_v, XV, X, a=a, b=b,h=h, f=f, c=func_c):
         i.grad.data.zero_()
     return I
 
-# TODO: ensure loss is normalised
-# def I(y_output_u, y_output_v, xt, xv, yv, tv, xu, yu, tu):
-#     shape = [y_output_u.shape[0], t_mesh_size, dim]
-#     shape[-1] = shape[-1] - 1
-#     y_output_u.retain_grad()
-#     y_output_v.retain_grad()
-#     phi = y_output_v * func_w(xt[:, :, 0]).unsqueeze(2).repeat(1, t_mesh_size, 1)
-#     y_output_u.backward(torch.ones(shape).to(device), retain_graph=True)
-#     du_x = xu.grad
-#     du_y = yu.grad
-#     phi.backward(torch.ones(shape).to(device), retain_graph=True)
-#     dphi_x = xv.grad
-#     dphi_y = yv.grad
-#     dphi_t = tv.grad.unsqueeze(2)
-#     s1 = y_output_u[:, -1, :] * phi[:, -1, :] - func_h(xt[:, 0, :]).unsqueeze(1) * phi[:, 0, :]
-#     s2 = (y_output_u * dphi_t)/t_mesh_size  # for t does this make sense?
-#     Lap = du_x * dphi_x + du_y * dphi_y
-#     s3 = (T-T0)*(Lap.unsqueeze(2) - y_output_u * y_output_u * phi - func_f(xt).unsqueeze(2) * phi)/t_mesh_size
-    
-#       # From Paul:  I also realised I made a typo in my loss function where I added 'y_output_u * y_output_u * phi' instead of subtracting it. Then I also noted that 'alpha' directly influences the size of the loss function so that even though a large 'alpha' may be good it will necessarily produce a large loss value and so the hyperparameter tuner will think its bad. I don't know how to solve this without getting the reverse effect (as only two terms in the sum have alpha as a coefficient). I am very sorry for my mistakes that have caused a big waste of time. I hope this will not happen again in the future.
-
-#     I = torch.sum(s1 - torch.sum(s2 - s3, 1), 0)
-#     xu.grad.data.zero_()
-#     yu.grad.data.zero_()
-#     xv.grad.data.zero_()
-#     yv.grad.data.zero_()
-#     tv.grad.data.zero_()
-#     return I
-
-# def L_init(y_output_u):
-#     return torch.mean((y_output_u[:, 0, 0] - func_h(xt_domain_train[:, :2, 0])) ** 2)
-
 def L_init(y_output_u, h=h):
     return torch.mean((y_output_u[:, 0, :].squeeze(1) - h) ** 2)
 
@@ -375,30 +340,17 @@ def L_bdry(u_net, g=g):
 #     return torch.mean((u_net(xt_boundary_train[:, 0, :], xt_boundary_train[:, 1, :], xt_boundary_train[:, 2, :]) -
 #                        func_g(xt_boundary_train).unsqueeze(2)) ** 2)
 
+
+
+def L_init(y_output_u, h=h):
+    return torch.mean((y_output_u[:, 0, :].squeeze(1) - h) ** 2)
+
+def L_bdry(u_net, g=g):
+    return torch.mean((u_net(xt_boundary_train[:, 0, :].requires_grad_(True), xt_boundary_train[:, 1, :].requires_grad_(True), xt_boundary_train[:, 2, :].requires_grad_(True)) - g) ** 2)
+
 def L_int(y_output_u, y_output_v, XV=XV, X=X):
     # x needs to be the set of points set plugged into net_u and net_v
     return torch.log((I(y_output_u, y_output_v, XV, X)) ** 2) - torch.log(torch.sum(y_output_v ** 2))
-
-# def L_int(y_output_u, y_output_v, xt=xt_domain_train, xv=xv, yv=yv, tv=tv, xu=xu, yu=yu, tu=tu):
-#     # x needs to be the set of points set plugged into net_u and net_v
-#     return torch.log((I(y_output_u, y_output_v, xt, xv, yv, tv, xu, yu, tu)) ** 2) - torch.log(torch.sum(y_output_v ** 2))
-
-
-#gamma = 25    # 1e5*boundary_sample_size*4  # 25
-#alpha = gamma
-
-
-# def L(y_output_u, y_output_v, u_net, alpha, gamma):
-#     return L_int(y_output_u, y_output_v) + gamma * L_init(y_output_u) + alpha * L_bdry(
-#         u_net)
-
-
-# def Loss_u(y_output_u, y_output_v, u_net, alpha, gamma):
-#     return L(y_output_u, y_output_v, u_net, alpha, gamma)
-
-
-# def Loss_v(y_output_u, y_output_v):
-#     return -L_int(y_output_u, y_output_v)
 
 def Loss_u(y_output_u, y_output_v, u_net, alpha, gamma):
     return L_int(y_output_u, y_output_v) + gamma * L_init(y_output_u) + alpha * L_bdry(u_net)
@@ -434,7 +386,7 @@ def train(config, checkpoint_dir=None):
     
     u_net.apply(init_weights)
     v_net.apply(init_weights)
-
+    
     #scheduler_u = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer_u, factor=0.5, patience=30)
     #scheduler_v = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer_v, factor=0.5, patience=30)
 
@@ -442,8 +394,8 @@ def train(config, checkpoint_dir=None):
     prediction_v = v_net(xv, yv, tv)
 
     Loss = 0
-    
-            
+    error_mae=10     
+    loss_min=10**8
     for k in range(iteration):
         
         # optimizers for WAN
@@ -452,12 +404,6 @@ def train(config, checkpoint_dir=None):
         
         scheduler_u = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer_u, factor=config['u_factor'], patience=0)
         scheduler_v = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer_v, factor=config['v_factor'], patience=0)
-        
-#         if k==0:
-#                 if checkpoint_dir:
-#                     with open(os.path.join(checkpoint_dir, "checkpoint")) as f:
-#                     state = json.loads(f.read())
-#                     start = state["step"] + 1
         
         for i in range(n1):
             
@@ -471,6 +417,7 @@ def train(config, checkpoint_dir=None):
                 print("this opt_u step is wrong")
             scheduler_u.step(loss_u)
             prediction_u = u_net(xu, yu, tu)            
+          
 
         for j in range(n2):
             loss_v = Loss_v(prediction_u, prediction_v)
@@ -486,7 +433,7 @@ def train(config, checkpoint_dir=None):
             prediction_v = v_net(xv, yv, tv)
 #             print('v',k,i,torch.isnan(prediction_v).any()) #sanity check
         
-        loss_u = Loss_u(prediction_u, prediction_v, u_net, 1, 1)        #this is to ensure that for our reported losses they are all scaled equally to avoid a bias away from large alpha
+       # loss_u = Loss_u(prediction_u, prediction_v, u_net, 1, 1)        #this is to ensure that for our reported losses they are all scaled equally to avoid a bias away from large alpha
         Loss += 0.1*loss_u
 
         if k % nn == 0:
@@ -495,12 +442,20 @@ def train(config, checkpoint_dir=None):
             print(k, loss_u.data.item(), loss_v.data.item())
             # print('learning rate at %d epoch：%f' % (k, optimizer_u.param_groups[0]['lr']))
             # print('learning rate at %d epoch：%f' % (k, optimizer_v.param_groups[0]['lr']))
-            
-            tune.report(loss=Loss.item())
+            if loss_min>Loss.item():
+                loss_min=Loss.item()
+
+            tune.report(loss=loss_min)            
             Loss = 0
-            error_test = torch.mean(
-                torch.sqrt(torch.square((func_u_sol(xt_domain_train) - prediction_u.data.squeeze(2))))).data
-            print("error test " + str(error_test))
+
+#             error_test = torch.mean(
+#                 torch.sqrt(torch.square((func_u_sol(xt_domain_train) - prediction_u.data.squeeze(2))))).data
+#             print("error test " + str(error_test.item()))
+#             if error_mae>error_test.item():
+#                 error_mae=error_test.item()
+
+#             tune.report(loss=error_mae)
+            
             with tune.checkpoint_dir(k) as checkpoint_dir:
                 path = os.path.join(checkpoint_dir, "checkpoint")
                 torch.save((u_net.state_dict(), v_net.state_dict()), path)
@@ -525,16 +480,6 @@ def train(config, checkpoint_dir=None):
             #torch.save(u_net.state_dict(), PATHg)
             #torch.save(v_net.state_dict(), PATHd)
 
-
-        #error_test = torch.mean(torch.sqrt(torch.square((func_u_sol(xt_domain_train) - prediction_u.data.squeeze(2))))).data
-#         error_test = torch.mean(torch.sqrt(torch.square(func_u_sol(xt_domain_val)-u_net(x_val, y_val, t_val).data.squeeze(2)))) newly deleted
-#         tune.report(loss=error_test.data) 
-        #tune.report(Loss=float(loss_u.detach().numpy()))
-        
-
-
-        #EarlyStopping(loss_u, u_net)
-        
    
 
 '''
@@ -559,32 +504,26 @@ plt.show()
 
 ray.init(num_cpus=4, num_gpus=3)
 grace_period=config['iteration']// config['subiteration']+1
+#grace_period=20
 analysis = tune.run(
     train,
-    num_samples=150,
+    num_samples=3,
     scheduler=ASHAScheduler(metric="loss", mode="min",  grace_period=grace_period, max_t=20*grace_period, reduction_factor=4),#
     config=config,
     verbose=2,
 #     local_checkpoint_dir='/home/wuy/ray_results/train_2021-01-30_23-34-27/',
-    local_dir='/home/wuy/ray_results/train_2021-01-30_23-34-27/',
+#    local_dir='/home/wuy/ray_results/train_2021-01-30_23-34-27/',
     #/train_2021-01-30_23-34-27/train_b1a42_00143_143_alpha\=1903.1\,u_rate\=0.0029375\,v_rate\=0.0023904_2021-02-02_21-40-56/checkpoint_7780
     resources_per_trial = {"gpu": 1},
+#     keep_checkpoints_num=1,
+#     checkpoint_score_attr="min-loss"
 #     resume=True,
-    resume='LOCAL'
+#    resume='LOCAL'
 #     num_gpus=1
 )
 
-### max_t>=grace_period
-
 best_trial = analysis.get_best_trial(metric="loss", mode="min")
 print("Best trial config: {}".format(best_trial.config))
-
-
-
-best_trained_generator = generator(best_trial.config).to(device)
-best_trained_discriminator = discriminator(best_trial.config).to(device)
-
-
 
 
 best_checkpoint_dir =best_trial.checkpoint.value
@@ -601,36 +540,3 @@ Root_dir='/scratch/wuy/wan-master/newNCDE/results/'
 # (if you have multiple sets of code running over different clusters)
 df.to_csv(Root_dir+"results_" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S") + ".txt")
 
-'''
-# Obtain a trial dataframe from all run trials of this `tune.run` call.
-dfs = analysis.trial_dataframes
-
-
-ax = None  # This plots everything on the same plot
-for d in dfs.values():
-    ax = d.mean_error.plot(ax=ax, legend=False)
-ax.set_xlabel("Epochs")
-ax.set_ylabel("Mean Error")
-
-
-x_mesh = torch.linspace(down, up, 500, requires_grad=True)
-mesh1, mesh2 = torch.meshgrid(x_mesh, x_mesh)
-mesh_1 = torch.reshape(mesh1, [-1, 1]).repeat(1, 11).unsqueeze(2).view(-1, 1, 11)
-mesh_2 = torch.reshape(mesh2, [-1, 1]).repeat(1, 11).unsqueeze(2).view(-1, 1, 11)
-t = torch.linspace(0, 1, 11).unsqueeze(1).view(1, -1).repeat(250000, 1).unsqueeze(2).view(-1, 1, 11)
-xt_comparison = torch.cat((mesh_1, mesh_2, t), dim=1)
-
-u_net = generator(config)
-
-error = torch.sqrt(torch.square(func_u_sol(xt_comparison)-u_net(xt_comparison[:, 0, :], xt_comparison[:, 1, :], xt_comparison[:, 2, :]).squeeze(2)))
-# mean_error = torch.mean(error, dim=1)
-# mean_error = mean_error.view(500, 500)
-l_error = error[:, -1].view(500,500)
-
-plt.figure(figsize=(10, 6))
-
-cset=plt.contourf(mesh1.data.numpy(),mesh2.data.numpy(), l_error.data.numpy(), 500, cmap='winter')
-
-plt.colorbar(cset)
-plt.show()
-'''
