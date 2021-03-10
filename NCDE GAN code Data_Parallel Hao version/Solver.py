@@ -60,14 +60,14 @@ print(device)
 intervals = 50
 step = 1
 t_mesh_size = int(step*intervals)
-batch_size = 60   # the number of random paths chosen at each iteration
+batch_size = 400   # the number of random paths chosen at each iteration
 depth = 1
-iteration = 2000
+iteration = 101
 npaths = int(iteration*batch_size)
 
 # assert npaths==batch_size, "Warning! The code does not yet support actual batches of data, modify the training function to do so"
 
-border_batch_size = 4*15 # make sure that this number is divisible by 4 and again this is the number of random paths chosen for the border
+border_batch_size = 4*100 # make sure that this number is divisible by 4 and again this is the number of random paths chosen for the border
 bnpaths = int(iteration*border_batch_size/4) #number of paths on the boundary (will be multiplied by 4)
 
 assert npaths==(4*bnpaths), "Need equality to ensure even samples in all subsamples from the dataloader"
@@ -333,11 +333,12 @@ def train(config, checkpoint_dir=None):
                                   func_u_sol(mesh_1_, mesh_2_, t1)[:,-1,0].view(50, 50).data.numpy(), 50, cmap='terrain')
             set2 = ax[1].contourf(mesh1.squeeze(1).data.numpy(), mesh2.squeeze(1).data.numpy(),
                                   net[:,-1,0].view(50, 50).data.numpy(), 50, cmap='terrain')
-            ax[1].scatter(X[0][ind*batch_size:(ind+1)*batch_size,-1,0].detach().numpy(),X[1][ind*batch_size:(ind+1)*batch_size,-1,0].detach().numpy(), color='k')
+            ax[1].scatter(X[0][ind*batch_size:(ind+1)*batch_size,-1,0].detach().numpy(),X[1][ind*batch_size:(ind+1)*batch_size,-1,0].detach().numpy(), color='k', s=0.4)
 
             fig.colorbar(set1, ax=ax[0])
             fig.colorbar(set2, ax=ax[1])
-
+            ax[0].set_title('Hao Version at epoch '+str(k))
+            plt.savefig(str(k)+'H')
             plt.show()
 
             '''
