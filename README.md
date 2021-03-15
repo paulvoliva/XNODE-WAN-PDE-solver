@@ -23,3 +23,4 @@ The tuning code is commented out at the moment and has not yet been extensively 
 1. [Weak Adversarial Networks for High-dimensional Partial
 Differential Equations](https://arxiv.org/pdf/1907.08272.pdf)
 2. [Solving high-dimensional partial differential equations using deep learning](https://www.pnas.org/content/115/34/8505)
+3. [Neural CDES for Long Time Series via the log-ODE Method](https://openreview.net/references/pdf?id=UeC5mrH-_A)
