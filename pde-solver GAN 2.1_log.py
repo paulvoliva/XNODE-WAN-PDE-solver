@@ -20,6 +20,8 @@ from torch.utils.tensorboard import SummaryWriter
 
 writer = SummaryWriter()
 
+torch.multiprocessing.set_start_method('spawn')
+
 """# Exact solution u(x) for the example PDE
 we conduct a experiment on solving a IBVP with nonlinear diffusion-reaction equation and boundary condition involving time:
 \begin{equation}
@@ -51,15 +53,15 @@ print(torch.cuda.is_available())
 
 def func_u_sol(xt):
     l = xt.shape[0]
-    u = 2 * torch.sin(math.pi / 2 * xt[:, 0, :]) * torch.cos(math.pi / 2 * xt[:, 1, :]) * torch.exp(-xt[:, 2, :])
+    u = 2 * torch.sin(math.pi / 2 * xt[:, 0, :]) * torch.exp(-xt[:, 2, :])
     return(u)
 
 # We denote spatial coordinates with time as 'xt' and 'x' without
 
 def func_f(xt):
     l = xt.shape[0]
-    f = (math.pi ** 2 - 2) * torch.sin(math.pi / 2 * xt[:, 0, :]) * torch.cos(math.pi / 2 * xt[:, 1, :]) * torch.exp(
-        -xt[:, 2, :]) - 4 * torch.sin(math.pi / 2 * xt[:, 0, :]) ** 2 * torch.cos(math.pi / 2 * xt[:, 1, :]) ** 2 * torch.exp(-2*xt[:, 2, :])
+    f = (math.pi ** 2 - 2) * torch.sin(math.pi / 2 * xt[:, 0, :])  * torch.exp(
+        -xt[:, 2, :]) - 4 * torch.sin(math.pi / 2 * xt[:, 0, :]) ** 2 * torch.exp(-2*xt[:, 2, :])
     return(f)
 
 
@@ -68,7 +70,7 @@ def func_g(boundary_xt):
 
 
 def func_h(x):
-    h = 2 * torch.sin(math.pi / 2 * x[:, 0]) * torch.cos(math.pi / 2 * x[:, 1])
+    h = 2 * torch.sin(math.pi / 2 * x[:, 0])
     return h
 
 def func_c(y_output_u):
@@ -90,9 +92,9 @@ T = 1
 up = 1.0
 down = -1.0
 dim = 2
-domain_sample_size = 8000  # 25000
+domain_sample_size = 160  # 25000
 t_mesh_size = 50
-boundary_sample_size = 90  # 250
+boundary_sample_size = 13  # 250
 num_workers = 1
 
 assert domain_sample_size%num_workers==0 & 4*boundary_sample_size%num_workers==0, "To make the dataloader work num_workers needs to divide the size of the domain and boundary samples"
@@ -406,7 +408,7 @@ def Loss_v(y_output_u, y_output_v, XV, X, ind):
 
 """# Training"""
 
-iteration = 101
+iteration = 20001
 
 x_mesh = torch.linspace(0, 1, 50, requires_grad=True)
 mesh1, mesh2 = torch.meshgrid(x_mesh, x_mesh)
@@ -492,7 +494,7 @@ def train(config, checkpoint_dir=None):
             # tune.report(Loss=Loss.item())
             prediction_u = u_net(x_error, y_error, t_error)
             error_test = torch.mean(
-                torch.sqrt(torch.square((func_u_sol(xt_domain_train) - prediction_u.cpu().data.squeeze(2))))).data
+                torch.sqrt(torch.square((func_u_sol(xt_domain_train).cpu() - prediction_u.cpu().data.squeeze(2))))).data
             print("error test " + str(error_test))
             writer.add_scalar("mae", error_test, k)
             writer.add_graph(u_net, input_to_model=(x_error, y_error, t_error))
