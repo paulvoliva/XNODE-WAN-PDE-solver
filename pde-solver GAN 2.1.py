@@ -19,6 +19,7 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
 writer = SummaryWriter()
+torch.multiprocessing.set_start_method('spawn')
 
 """# Exact solution u(x) for the example PDE
 we conduct a experiment on solving a IBVP with nonlinear diffusion-reaction equation and boundary condition involving time:
@@ -423,7 +424,7 @@ def L_bdry(u_net, xt_boundary_train, ind, g=g):
 
 def L_int(y_output_u, y_output_v, XV, X, ind):
     # x needs to be the set of points set plugged into net_u and net_v
-    return torch.log((I(y_output_u, y_output_v, XV, X, ind)) ** 2) - torch.log(torch.sum(y_output_v ** 2))
+    return torch.log(I(y_output_u, y_output_v, XV, X, ind) ** 2) - torch.log(torch.sum(y_output_v ** 2))
 
 
 def Loss_u(y_output_u, y_output_v, u_net, alpha, gamma, xt_boundary_train, XV, X, ind):
@@ -490,7 +491,7 @@ def train(config, checkpoint_dir=None):
                 #.grad
                 #plot_grad_flow(u_net.named_parameters())
                 #print('learning rate: ', optimizer_u.param_groups[0]['lr'])
-                scheduler_u.step(loss_u)
+            scheduler_u.step(loss_u)
 
         for j in range(n2):
             for ind, (xu, yu, tu, xv, yv, tv, btxy) in enumerate(ds):
@@ -506,7 +507,7 @@ def train(config, checkpoint_dir=None):
                 optimizer_v.zero_grad()
                 loss_v.backward(retain_graph=True)
                 optimizer_v.step()
-                scheduler_v.step(loss_v)
+            scheduler_v.step(loss_v)
 
         prediction_v = v_net(x_error, y_error, t_error)
         prediction_u = u_net(x_error, y_error, t_error)
@@ -523,7 +524,7 @@ def train(config, checkpoint_dir=None):
             # tune.report(Loss=Loss.item())
             prediction_u = u_net(x_error, y_error, t_error)
             error_test = torch.mean(
-                torch.sqrt(torch.square((func_u_sol(xt_domain_train) - prediction_u.data.squeeze(2))))).data
+                torch.sqrt(torch.square((func_u_sol(xt_domain_train).cpu() - prediction_u.data.squeeze(2))))).data
             print("error test " + str(error_test))
             writer.add_scalar("mae", error_test, k)
             writer.add_graph(u_net, input_to_model=(x_error, y_error, t_error))
