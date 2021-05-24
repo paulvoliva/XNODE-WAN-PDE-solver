@@ -481,7 +481,7 @@ def train(config, setup, iterations):
                 # writer.add_scalar("Loss", loss_u, k)
                 optimizer_u.zero_grad()
                 loss_u.backward(retain_graph=True)
-                #optimizer_u.step()
+                optimizer_u.step()
             scheduler_u.step(loss_u)
 
         for j in range(n2):
