@@ -1,6 +1,9 @@
 # PDE-Solver
 This is a work in progress code to look into different approaches to use GANs to solve elliptic/parabolic PDEs.
 
+# Running WAN codes
+The newest and most accurate version of the codes is `pde-solver GAN 3.0.py` and is now much clearer with descriptions of all the classes and their inputs. To modify the code all the functions defined at the start and starting with `func` should be the ones of the problem described below. Further the dimension of the problem and the number of points sampled are determined in the dictionary `setup` whilst the hyperparameters for the neural nets and the machine learning are stored in the dictionary `config`. When these are all set to match the problem all that is left to do is choose the number of iterations and to plug these into the function `train` at the bottom of the document.
+
 # Running NCDE Codes
 It is important to maintain the file structure as it is to ensure that the imports work correctly (sometimese it may not be possible to have files so it may be necessary to modify the import lines). It is important that all the imports are compatible and the version of `torch` for which the files work is `1.6.0`.
 
