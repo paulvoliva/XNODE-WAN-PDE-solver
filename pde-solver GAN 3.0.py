@@ -531,5 +531,3 @@ print(Loss.int(func_u_sol(xt), v_net(points.interiorv), 0, points.interioru, poi
 
 train(config, setup, 100)
 
-# TODO: check what plugging in u_sol instead of u_net does
-
