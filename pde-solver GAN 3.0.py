@@ -40,6 +40,7 @@ torch.Tensor.__repr__ = tensor_info
 
 # setting to cuda
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+print(device)
 
 '''
 # Setting the specific problem to solve
@@ -97,6 +98,8 @@ def func_w(
 
 ''' # Data'''
 
+# TODO: change the loader to choose randomly in the domain (no t_mesh) and to choose new points every iteration
+# This will have to imply that we loose the third dimension
 
 class Comb_loader(Dataset):
     '''
@@ -197,9 +200,9 @@ class Comb_loader(Dataset):
 # dictionary with all the configurations of meshes and the problem dimension
 
 setup = {'dim': 2,
-         'domain_sample_size': 10000,
+         'domain_sample_size': 8000,
          'boundary_sample_size': 160,
-         't_mesh_size': 200
+         't_mesh_size': 10
          }
 
 # for computational efficiency the functions will be evaluated here
@@ -320,17 +323,17 @@ class discriminator(torch.nn.Module):
 # Hyperparameters
 
 config = {
-    'alpha': 1e2 * 40 * 4,
+    'alpha': 1e4 * 40 * 25,
     'u_layers': 7,
     'u_hidden_dim': 20,
     'v_layers': 9,
     'v_hidden_dim': 50,
-    'n1': 10,
-    'n2': 5,
-    'u_rate': 0.04,
-    'v_rate': 0.015,
-    'u_factor': 0.8,
-    'v_factor': 0.95
+    'n1': 2,
+    'n2': 1,
+    'u_rate': 0.015,
+    'v_rate': 0.04,
+    'u_factor': 0.999,
+    'v_factor': 0.999
 }
 
 ''' # Loss functions '''
@@ -442,10 +445,6 @@ def L_norm(X, predu, p):
 
 
 def train(config, setup, iterations):
-    points = Comb_loader(setup['boundary_sample_size'], setup['domain_sample_size'], setup['t_mesh_size'], setup['dim'])
-    ds = DataLoader(points, num_workers=points.num_workers)
-
-    h, f, g, a, b = funcs(points, setup)
 
     n1 = config['n1']
     n2 = config['n2']
@@ -457,10 +456,15 @@ def train(config, setup, iterations):
     u_net.apply(init_weights)
     v_net.apply(init_weights)
 
-    # TODO: test that the ind allows for correct X
-    Loss = loss(points.border, config['alpha'], a, b, h, f, g, setup)
-
     for k in range(iterations):
+
+        points = Comb_loader(setup['boundary_sample_size'], setup['domain_sample_size'], setup['t_mesh_size'],
+                             setup['dim'])
+        ds = DataLoader(points, num_workers=points.num_workers)
+
+        h, f, g, a, b = funcs(points, setup)
+
+        Loss = loss(points.border, config['alpha'], a, b, h, f, g, setup)
 
         # optimizers for WAN
         optimizer_u = torch.optim.Adam(u_net.parameters(), lr=config['u_rate'])
@@ -529,5 +533,6 @@ print(Loss.int(func_u_sol(xt), v_net(points.interiorv), 0, points.interioru, poi
 # initial loss and boundary loss obviously work
 #'''
 
-train(config, setup, 100)
+train(config, setup, 11)
+
 
