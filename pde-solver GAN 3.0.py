@@ -52,15 +52,14 @@ if torch.cuda.is_available():
 
 def func_u_sol(xt):
     l = xt.shape[0]
-    u = 2 * torch.sin(math.pi / 2 * xt[:, 0]) * torch.cos(math.pi / 2 * xt[:, 1]) * torch.exp(-xt[:, -1])
+    u = 2 * torch.sin(math.pi / 2 * xt[:, 0]) * torch.exp(-xt[:, -1])
     return (u)
 
 
 def func_f(xt):
     l = xt.shape[0]
-    f = (math.pi ** 2 - 2) * torch.sin(math.pi / 2 * xt[:, 0]) * torch.cos(math.pi / 2 * xt[:, 1]) * torch.exp(
-        -xt[:, -1]) - 4 * torch.sin(math.pi / 2 * xt[:, 0]) ** 2 * torch.cos(
-        math.pi / 2 * xt[:, 1]) ** 2 * torch.exp(-2 * xt[:, -1])
+    f = (math.pi ** 2 - 2) * torch.sin(math.pi / 2 * xt[:, 0]) * torch.exp(-xt[:, -1]) - 4 * \
+        torch.sin(math.pi / 2 * xt[:, 0]) ** 2 * torch.exp(-2 * xt[:, -1])
     return (f)
 
 
@@ -69,7 +68,7 @@ def func_g(boundary_xt):
 
 
 def func_h(x):
-    h = 2 * torch.sin(math.pi / 2 * x[:, 0]) * torch.cos(math.pi / 2 * x[:, 1])
+    h = 2 * torch.sin(math.pi / 2 * x[:, 0])
     return h
 
 
@@ -88,12 +87,15 @@ def func_b(xt, i):
     return torch.zeros(xt.shape[0], 1)
 
 
-def func_w(x):  # returns 1 for positions in the domain and 0 for those on the boundary so that our test function has support in the domain
-    lens = x.shape
-    w_bool = torch.gt(1 - torch.abs(x), torch.zeros(lens).to(device)) & torch.gt(torch.abs(x),
-                                                                                 torch.zeros(lens).to(device))
-    w_val = torch.where(w_bool, 1 - torch.abs(x) + torch.abs(x), torch.zeros(lens).to(device))
-    return (w_val)  # .view(-1, 1))
+def func_w(x):
+    # again we assume that the domain is a hypercube and specifically that the boundaries are 1 and -1
+
+    disttop = torch.min(torch.abs(1-x), dim=1).values
+    distbot = torch.min(torch.abs(-1-x), dim=1).values
+
+    dist = torch.minimum(disttop, distbot)
+
+    return dist
 
 
 ''' # Data'''
@@ -146,8 +148,10 @@ class Comb_loader(Dataset):
 
         border = torch.Tensor(0, dim)
 
-        sd = [torch.cat((torch.Tensor(side_size, i).uniform_(down, up), downs.clone(), torch.Tensor(side_size, dim - 1 - i).uniform_(down, up)), 1) for i in range(dim)]
-        su = [torch.cat((torch.Tensor(side_size, i).uniform_(down, up), ups.clone(), torch.Tensor(side_size, dim - 1 - i).uniform_(down, up)), 1) for i in range(dim)]
+        sd = [torch.cat((torch.Tensor(side_size, i).uniform_(down, up), downs.clone(),
+                         torch.Tensor(side_size, dim - 1 - i).uniform_(down, up)), 1) for i in range(dim)]
+        su = [torch.cat((torch.Tensor(side_size, i).uniform_(down, up), ups.clone(),
+                         torch.Tensor(side_size, dim - 1 - i).uniform_(down, up)), 1) for i in range(dim)]
 
         for i, j in zip(sd, su):
             border = torch.cat((border, i, j), 0)
@@ -180,7 +184,8 @@ class Comb_loader(Dataset):
             worker_id = worker_info.id
             start_int, start_bor = worker_id * int_size, worker_id * bor_size
             end_int, end_bor = min(start_int + int_size, self.end_int), min(start_bor + bor_size, self.end_bor)
-        points_sep = [self.interioru[i][start_int:end_int, :] for i in range(self.dim + 1)] + [self.interiorv[i][start_int:end_int, :] for i in range(self.dim + 1)]
+        points_sep = [self.interioru[i][start_int:end_int, :] for i in range(self.dim + 1)] + [
+            self.interiorv[i][start_int:end_int, :] for i in range(self.dim + 1)]
         points_sep.append(self.border[start_bor:end_bor, :])
         return points_sep
 
@@ -310,7 +315,7 @@ class discriminator(torch.nn.Module):
 # Hyperparameters
 
 config = {
-    'alpha': 1e4 * 40 * 25, #tune.loguniform(1e4, 1e8),   #
+    'alpha': 1e4 * 40 * 25,  # tune.loguniform(1e4, 1e8),   #
     'u_layers': 7,
     'u_hidden_dim': 20,
     'v_layers': 9,
@@ -334,7 +339,6 @@ class loss:
     time T0) and `bdry` the loss on the boundary. (Note that in this non-linear example the function c is defined not as
     a Tensor but a function as it depends on the networks guesses of the function $u_\theta$.
 
-    border (Tensor): Tensor containing all the points in our boundary with shape [L, C, T]
     alpha (int): the $\alpha=\gamma$ parameter that assigns relative weights to the initial and boundary loss
     a (Tensor): Tensor with the values of $a$ (from the general form) evaluated at the points of the domain
     b (Tensor): Tensor with the values of $b$ (from the general form) evaluated at the points of the domain
@@ -344,9 +348,8 @@ class loss:
     setup (dict): dictionary with all the configurations of meshes and the problem dimension
     '''
 
-    def __init__(self, border, alpha, a, b, h, f, g, setup, initialps, c=func_c, T=1, T0=0):
+    def __init__(self, alpha, a, b, h, f, g, setup, initialps, c=func_c, T=1, T0=0):
         super(loss).__init__()
-        self.boundary = border
         self.T = T
         self.T0 = T0
         self.alpha = alpha
@@ -360,13 +363,12 @@ class loss:
         self.initialps = initialps
         self.V = 1  # Volume of \Omega
 
-    # TODO: check how the paper implements
     def I(self, y_output_u, y_output_v, ind, X, XV, u_net, v_net):
         y_output_u.retain_grad()
         y_output_v.retain_grad()
         N = y_output_u.shape[0]
-        f = [func_w(XV[i]) for i in range(setup['dim'])]
-        w = math.prod(f)
+        xw = torch.cat(tuple([XV[i] for i in range(setup['dim'])]), dim=1)
+        w = func_w(xw).unsqueeze(1)
         phi = y_output_v * w
         [XV[i].retain_grad() for i in range(self.setup['dim'])]
         y_output_u.backward(torch.ones_like(y_output_u).to(device), retain_graph=True)
@@ -403,9 +405,9 @@ class loss:
         return torch.mean((u_net(init) - self.h[ind * N:(ind + 1) * N]) ** 2)
 
     # initially had all variables feed with grad
-    def bdry(self, ind, u_net, N):
-        return torch.mean((u_net([self.boundary[ind * N:(ind + 1) * N, i].unsqueeze(1) for i in range(setup['dim'] + 1)])\
-                           - self.g[ind * N:(ind + 1) * N].unsqueeze(1)) ** 2)
+    def bdry(self, ind, u_net, N, border):
+        return torch.mean(
+            (u_net([border[ind * N:(ind + 1) * N, i].unsqueeze(1) for i in range(setup['dim'] + 1)]) - self.g[ind * N:(ind + 1) * N].unsqueeze(1)) ** 2)
 
     def int(self, y_output_u, y_output_v, ind, X, XV, u_net, v_net):
         # x needs to be the set of points set plugged into net_u and net_v
@@ -413,16 +415,17 @@ class loss:
         return torch.log(self.I(y_output_u, y_output_v, ind, X, XV, u_net, v_net) ** 2) - torch.log(
             (self.T - self.T0) * self.V * torch.sum(y_output_v ** 2) / N)
 
-    def u(self, y_output_u, y_output_v, ind, u_net, v_net, X, XV):
+    def u(self, y_output_u, y_output_v, ind, u_net, v_net, X, XV, border):
         N = y_output_u.shape[0]
         return self.int(y_output_u, y_output_v, ind, X, XV, u_net, v_net) + torch.mul((
-                self.init(u_net, ind) + self.bdry(ind, u_net, N)), self.alpha)
+                self.init(u_net, ind) + self.bdry(ind, u_net, N, border)), self.alpha)
 
     def v(self, y_output_u, y_output_v, ind, X, XV, u_net, v_net):
         return torch.mul(self.int(y_output_u, y_output_v, ind, X, XV, u_net, v_net), -1)
 
 
 ''' # Auxillary Funcs '''
+
 
 def L_norm(X, predu, p):
     # p is the p in L^p
@@ -432,6 +435,7 @@ def L_norm(X, predu, p):
     u_sol = func_u_sol(xt).to(device)
     return (torch.mean(torch.pow(torch.abs(u_sol - predu), p))) ** (1 / p)
 
+
 def rel_err(X, predu):
     xt = torch.Tensor(X[0].shape[0], 0)
     for i in X:
@@ -440,7 +444,8 @@ def rel_err(X, predu):
     rel = torch.abs(torch.div(u_sol - predu, u_sol))
     return 100 * torch.mean(rel).item()
 
-def proj(u_net, axes=[0,1], down=-1, up=1, T=1, T0=0, n=setup['boundary_sample_size'], save=False, resolution=100):
+
+def proj(u_net, axes=[0, 1], down=-1, up=1, T=1, T0=0, n=setup['boundary_sample_size'], save=False, resolution=100):
     # Assumes hypercube
     assert len(axes) == 2, 'There can only be two axes in the graph to be able to display them'
 
@@ -466,7 +471,7 @@ def proj(u_net, axes=[0,1], down=-1, up=1, T=1, T0=0, n=setup['boundary_sample_s
     u_sol = func_u_sol(xt).to(device)
     predu = u_net([xt[:, i].unsqueeze(1) for i in range(setup['dim'] + 1)]).to(device).detach()
 
-    error = predu-u_sol.unsqueeze(1)
+    error = predu - u_sol.unsqueeze(1)
 
     plt.clf()
     fig, ax = plt.subplots(3)
@@ -488,6 +493,7 @@ def proj(u_net, axes=[0,1], down=-1, up=1, T=1, T0=0, n=setup['boundary_sample_s
 ''' # Training '''
 
 params = {**config, **setup, **{'iterations': int(2e4 + 1)}}
+
 
 def train(params, checkpoint_dir=None):
     i = iter(params.items())
@@ -513,7 +519,9 @@ def train(params, checkpoint_dir=None):
 
         h, f, g, a, b = funcs(points, setup)
 
-        Loss = loss(points.border, config['alpha'], a, b, h, f, g, setup, points.init)
+        border = points.border.detach().to(device).requires_grad_(True)
+
+        Loss = loss(config['alpha'], a, b, h, f, g, setup, points.init)
 
         # optimizers for WAN
         optimizer_u = torch.optim.Adam(u_net.parameters(), lr=config['u_rate'])
@@ -524,12 +532,13 @@ def train(params, checkpoint_dir=None):
 
         for i in range(n1):
             for ind, data in enumerate(ds):
+                border = data[-1].squeeze(0).to(device).requires_grad_(True)
                 data = [data[i].squeeze(0).to(device).requires_grad_(True) for i in range(2 * setup['dim'] + 2)]
                 X = data[:setup['dim'] + 1]
                 XV = data[setup['dim'] + 1: 2 * setup['dim'] + 2]
                 prediction_v = v_net(XV)
                 prediction_u = u_net(X)
-                loss_u = Loss.u(prediction_u, prediction_v, ind, u_net, v_net, X, XV)
+                loss_u = Loss.u(prediction_u, prediction_v, ind, u_net, v_net, X, XV, border)
                 # writer.add_scalar("Loss", loss_u, k)
                 optimizer_u.zero_grad()
                 loss_u.backward(retain_graph=True)
@@ -558,8 +567,7 @@ def train(params, checkpoint_dir=None):
             tune.report(L1=L1)
             print('L^1 norm ' + str(L1))
             print('Relative Error ' + str.format('{0:.3f}', rel_err(X, predu)) + '%')
-            #proj(u_net, axes=[0, 5])
-
+            proj(u_net, axes=[0, 5])
 
 train(params)
 
