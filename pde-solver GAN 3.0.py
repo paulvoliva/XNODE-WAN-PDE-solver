@@ -436,7 +436,7 @@ def rel_err(X, predu):
     xt = torch.Tensor(X[0].shape[0], 0)
     for i in X:
         xt = torch.cat((xt, i), 1)
-    u_sol = func_u_sol(xt).to(device)
+    u_sol = func_u_sol(xt).to(device).unsqueeze(1)
     rel = torch.abs(torch.div(u_sol - predu, u_sol))
     return 100 * torch.mean(rel).item()
 
