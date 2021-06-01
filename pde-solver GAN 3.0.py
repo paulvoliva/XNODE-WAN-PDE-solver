@@ -52,15 +52,15 @@ if torch.cuda.is_available():
 
 def func_u_sol(xt):
     l = xt.shape[0]
-    u = 2 * torch.sin(math.pi / 2 * xt[:, 0]) * torch.cos(math.pi / 2 * xt[:, 1]) * torch.exp(-xt[:, 2])
+    u = 2 * torch.sin(math.pi / 2 * xt[:, 0]) * torch.cos(math.pi / 2 * xt[:, 1]) * torch.exp(-xt[:, -1])
     return (u)
 
 
 def func_f(xt):
     l = xt.shape[0]
     f = (math.pi ** 2 - 2) * torch.sin(math.pi / 2 * xt[:, 0]) * torch.cos(math.pi / 2 * xt[:, 1]) * torch.exp(
-        -xt[:, 2]) - 4 * torch.sin(math.pi / 2 * xt[:, 0]) ** 2 * torch.cos(
-        math.pi / 2 * xt[:, 1]) ** 2 * torch.exp(-2 * xt[:, 2])
+        -xt[:, -1]) - 4 * torch.sin(math.pi / 2 * xt[:, 0]) ** 2 * torch.cos(
+        math.pi / 2 * xt[:, 1]) ** 2 * torch.exp(-2 * xt[:, -1])
     return (f)
 
 
@@ -440,32 +440,39 @@ def rel_err(X, predu):
     rel = torch.abs(torch.div(u_sol - predu, u_sol))
     return 100 * torch.mean(rel).item()
 
-# TODO: change the proj function to make it work
-def proj(u_net, axes=[0,1], down=-1, up=1, T=1, T0=0, n=setup['boundary_sample_size'], save=False):
+def proj(u_net, axes=[0,1], down=-1, up=1, T=1, T0=0, n=setup['boundary_sample_size'], save=False, resolution=100):
     # Assumes hypercube
     assert len(axes) == 2, 'There can only be two axes in the graph to be able to display them'
 
-    xt = torch.Tensor(n, setup['dim'] + 1)
+    xt = torch.Tensor(resolution ** 2, setup['dim'] + 1)
+
+    if setup['dim'] in axes:
+        t_mesh = torch.linspace(T0, T, resolution)
+    else:
+        t_mesh = torch.linspace(down, up, resolution)
+        xt[:, -1] = torch.Tensor(resolution ** 2).uniform_(T0, T)
+
+    x_mesh = torch.linspace(down, up, resolution)
+    mesh1, mesh2 = torch.meshgrid(x_mesh, t_mesh)
+    mesh1_, mesh2_ = mesh1.reshape(-1, 1), mesh2.reshape(-1, 1)
+    mesh = torch.cat((mesh1_, mesh2_), dim=1)
 
     for i in axes:
-        xt[:, i] = torch.Tensor(n).uniform_(down, up)
+        xt[:, i] = mesh[:, axes.index(i)]
 
-    for i in list(set(range(setup['dim'] + 1)) - set(axes)):
-        xt[:, i] = up * torch.ones(n)
-
-    if int(setup['dim']+1) in axes:
-        xt[:, i] = torch.Tensor(n).uniform_(T0, T)
+    for i in list(set(range(setup['dim'])) - set(axes)):
+        xt[:, i] = up * torch.ones(resolution ** 2)
 
     u_sol = func_u_sol(xt).to(device)
-    predu = u_net([xt[:, i].unsqueeze(1) for i in range(setup['dim'] + 1)]).to(device)
+    predu = u_net([xt[:, i].unsqueeze(1) for i in range(setup['dim'] + 1)]).to(device).detach()
 
-    error = predu-u_sol
+    error = predu-u_sol.unsqueeze(1)
 
     plt.clf()
     fig, ax = plt.subplots(3)
-    aset = ax[0].contourf(xt[:, axes[0]].numpy(), xt[:, axes[1]].numpy(), u_sol.cpu().numpy())
-    bset = ax[1].contourf(xt[:, axes[0]].numpy(), xt[:, axes[1]].numpy(), predu.cpu().numpy())
-    cset = ax[2].contourf(xt[:, axes[0]].numpy(), xt[:, axes[1]].numpy(), error.cpu().numpy())
+    aset = ax[0].contourf(x_mesh.numpy(), t_mesh.numpy(), u_sol.view(resolution, resolution).cpu().numpy())
+    bset = ax[1].contourf(x_mesh.numpy(), t_mesh.numpy(), predu.view(resolution, resolution).cpu().numpy())
+    cset = ax[2].contourf(x_mesh.numpy(), t_mesh.numpy(), error.view(resolution, resolution).cpu().numpy())
     fig.colorbar(aset, ax=ax[0])
     fig.colorbar(bset, ax=ax[1])
     fig.colorbar(cset, ax=ax[2])
