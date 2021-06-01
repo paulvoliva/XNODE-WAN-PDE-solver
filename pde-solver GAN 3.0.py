@@ -1,8 +1,13 @@
+import itertools
 import math
 import torch
 from torch.utils.data import DataLoader, Dataset
 from itertools import product
+from ray import tune
+from ray.tune.schedulers import ASHAScheduler
 from torch.utils.tensorboard import SummaryWriter
+import numpy as np
+import matplotlib.pyplot as plt
 
 # Here we set up some of the packages we will use
 writer = SummaryWriter()
@@ -35,6 +40,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(device)
 
 if torch.cuda.is_available():
+    torch.cuda.empty_cache()
     torch.cuda.init()
 
 '''
@@ -93,16 +99,13 @@ def func_w(x):  # returns 1 for positions in the domain and 0 for those on the b
 ''' # Data'''
 
 
-# TODO: change the loader to choose randomly in the domain (no t_mesh) and to choose new points every iteration
-# This will have to imply that we loose the third dimension
-
 class Comb_loader(Dataset):
     '''
     This class is the dataset loader. It will return the domain data for both networks as well as the border domain data.
     This data loader assumes that the boundary is a hypercube.
     '''
 
-    def __init__(self, boundary_sample_size, domain_sample_size, dim, down=0, up=1, T0=0, T=1,
+    def __init__(self, boundary_sample_size, domain_sample_size, dim, down=-1, up=1, T0=0, T=1,
                  num_workers=1):
         '''
         boundary_sample_size (int): This is the number of points on each of the faces of the hypercube
@@ -186,9 +189,9 @@ class Comb_loader(Dataset):
 
 # dictionary with all the configurations of meshes and the problem dimension
 
-setup = {'dim': 3,
-         'domain_sample_size': 8000,
-         'boundary_sample_size': 18
+setup = {'dim': 5,
+         'domain_sample_size': 4000 * 5,
+         'boundary_sample_size': 40 * (5 ** 2)
          }
 
 
@@ -205,7 +208,7 @@ def funcs(points, setup):
 
     # this is meant to be a d by d-dimensional array containing domain_sample_size by 1 tensors
     a = torch.Tensor(setup['dim'], setup['dim'], setup['domain_sample_size'], 1)
-    
+
     for i, j in product(range(setup['dim']), repeat=2):
         a[i, j] = func_a(xt, i, j)
 
@@ -307,7 +310,7 @@ class discriminator(torch.nn.Module):
 # Hyperparameters
 
 config = {
-    'alpha': 1e2 * 40 * 25,
+    'alpha': 1e4 * 40 * 25, #tune.loguniform(1e4, 1e8),   #
     'u_layers': 7,
     'u_hidden_dim': 20,
     'v_layers': 9,
@@ -316,8 +319,8 @@ config = {
     'n2': 1,
     'u_rate': 0.015,
     'v_rate': 0.04,
-    'u_factor': 0.999,
-    'v_factor': 0.999
+    'u_factor': 1 - 1e-10,
+    'v_factor': 1 - 1e-10
 }
 
 ''' # Loss functions '''
@@ -355,12 +358,13 @@ class loss:
         self.setup = setup
         self.c = c
         self.initialps = initialps
+        self.V = 1  # Volume of \Omega
 
+    # TODO: check how the paper implements
     def I(self, y_output_u, y_output_v, ind, X, XV, u_net, v_net):
         y_output_u.retain_grad()
         y_output_v.retain_grad()
         N = y_output_u.shape[0]
-        V = 1  # Volume of \Omega
         f = [func_w(XV[i]) for i in range(setup['dim'])]
         w = math.prod(f)
         phi = y_output_v * w
@@ -377,15 +381,15 @@ class loss:
         fin.append(self.T * torch.ones(fin[0].shape[0], 1).to(device))
         init = [self.initialps[ind * N:(ind + 1) * N, i].unsqueeze(1) for i in range(setup['dim'])]
         init.append(self.T0 * torch.ones(init[0].shape[0], 1).to(device))
-        s1 = V * (u_net(fin) * v_net(fin) - self.h[ind * N:(ind + 1) * N].unsqueeze(1) * v_net(init)) / N
-        s2 = (self.T - self.T0) * V * (y_output_u * dphi['dphi_2']) / N
+        s1 = self.V * (u_net(fin) * v_net(fin) - self.h[ind * N:(ind + 1) * N].unsqueeze(1) * v_net(init)) / N
+        s2 = (self.T - self.T0) * self.V * (y_output_u * dphi['dphi_2']) / N
         s31 = [self.a[i, j, ind * N:(ind + 1) * N, :] * dphi['dphi_' + str(i)] * du['du_' + str(j)] for i, j in
                product(range(self.setup['dim']), repeat=2)]
-        s31 = sum(s31)
-        s32 = sum([self.b[i, ind * N:(ind + 1) * N, :] * phi * du['du_' + str(i)] for i in range(self.setup['dim'])])
+        s31 = np.sum(s31)
+        s32 = np.sum([self.b[i, ind * N:(ind + 1) * N, :] * phi * du['du_' + str(i)] for i in range(self.setup['dim'])])
         c = self.c(y_output_u)
         s3f = s31 + s32 + c * y_output_u * phi + self.f[ind * N:(ind + 1) * N].unsqueeze(1) * phi
-        s3c = (self.T - self.T0) * V / N
+        s3c = (self.T - self.T0) * self.V / N
         s3 = s3c * s3f
         I = torch.sum(s1, 0) - torch.sum(s2 - s3, 0)
         [i.grad.data.zero_() for i in X]
@@ -400,24 +404,25 @@ class loss:
 
     # initially had all variables feed with grad
     def bdry(self, ind, u_net, N):
-        return torch.mean((u_net(
-            [self.boundary[ind * N:(ind + 1) * N, i].unsqueeze(1) for i in range(setup['dim'] + 1)]) - self.g[ind * N:(
-                                                                                                                                  ind + 1) * N].unsqueeze(
-            1)) ** 2)
+        return torch.mean((u_net([self.boundary[ind * N:(ind + 1) * N, i].unsqueeze(1) for i in range(setup['dim'] + 1)])\
+                           - self.g[ind * N:(ind + 1) * N].unsqueeze(1)) ** 2)
 
     def int(self, y_output_u, y_output_v, ind, X, XV, u_net, v_net):
         # x needs to be the set of points set plugged into net_u and net_v
+        N = y_output_v.shape[0]
         return torch.log(self.I(y_output_u, y_output_v, ind, X, XV, u_net, v_net) ** 2) - torch.log(
-            torch.sum(y_output_v ** 2))
+            (self.T - self.T0) * self.V * torch.sum(y_output_v ** 2) / N)
 
     def u(self, y_output_u, y_output_v, ind, u_net, v_net, X, XV):
         N = y_output_u.shape[0]
-        return self.int(y_output_u, y_output_v, ind, X, XV, u_net, v_net) + self.alpha * (
-                self.init(u_net, ind) + self.bdry(ind, u_net, N))
+        return self.int(y_output_u, y_output_v, ind, X, XV, u_net, v_net) + torch.mul((
+                self.init(u_net, ind) + self.bdry(ind, u_net, N)), self.alpha)
 
     def v(self, y_output_u, y_output_v, ind, X, XV, u_net, v_net):
-        return -self.int(y_output_u, y_output_v, ind, X, XV, u_net, v_net)
+        return torch.mul(self.int(y_output_u, y_output_v, ind, X, XV, u_net, v_net), -1)
 
+
+''' # Auxillary Funcs '''
 
 def L_norm(X, predu, p):
     # p is the p in L^p
@@ -427,13 +432,62 @@ def L_norm(X, predu, p):
     u_sol = func_u_sol(xt).to(device)
     return (torch.mean(torch.pow(torch.abs(u_sol - predu), p))) ** (1 / p)
 
+def rel_err(X, predu):
+    xt = torch.Tensor(X[0].shape[0], 0)
+    for i in X:
+        xt = torch.cat((xt, i), 1)
+    u_sol = func_u_sol(xt).to(device)
+    rel = torch.abs(torch.div(u_sol - predu, u_sol))
+    return 100 * torch.mean(rel).item()
 
-# TODO: create a projection function
+# TODO: change the proj function to make it work
+def proj(u_net, axes=[0,1], down=-1, up=1, T=1, T0=0, n=setup['boundary_sample_size'], save=False):
+    # Assumes hypercube
+    assert len(axes) == 2, 'There can only be two axes in the graph to be able to display them'
+
+    xt = torch.Tensor(n, setup['dim'] + 1)
+
+    for i in axes:
+        xt[:, i] = torch.Tensor(n).uniform_(down, up)
+
+    for i in list(set(range(setup['dim'] + 1)) - set(axes)):
+        xt[:, i] = up * torch.ones(n)
+
+    if int(setup['dim']+1) in axes:
+        xt[:, i] = torch.Tensor(n).uniform_(T0, T)
+
+    u_sol = func_u_sol(xt).to(device)
+    predu = u_net([xt[:, i].unsqueeze(1) for i in range(setup['dim'] + 1)]).to(device)
+
+    error = predu-u_sol
+
+    plt.clf()
+    fig, ax = plt.subplots(3)
+    aset = ax[0].contourf(xt[:, axes[0]].numpy(), xt[:, axes[1]].numpy(), u_sol.cpu().numpy())
+    bset = ax[1].contourf(xt[:, axes[0]].numpy(), xt[:, axes[1]].numpy(), predu.cpu().numpy())
+    cset = ax[2].contourf(xt[:, axes[0]].numpy(), xt[:, axes[1]].numpy(), error.cpu().numpy())
+    fig.colorbar(aset, ax=ax[0])
+    fig.colorbar(bset, ax=ax[1])
+    fig.colorbar(cset, ax=ax[2])
+    ax[0].set_title('Correct Solution, Guess and Error')
+    plt.show()
+    print('Displayed')
+
+    if save:
+        plt.savefig('plot_dim_' + str(axes[0]) + '_+_' + str(axes[1]) + '.png')
+        print('Saved')
+
 
 ''' # Training '''
 
+params = {**config, **setup, **{'iterations': int(2e4 + 1)}}
 
-def train(config, setup, iterations):
+def train(params, checkpoint_dir=None):
+    i = iter(params.items())
+    config = dict(itertools.islice(i, 11))
+    setup = dict(itertools.islice(i, 3))
+    iterations = dict(i)['iterations']
+
     n1 = config['n1']
     n2 = config['n2']
 
@@ -493,29 +547,27 @@ def train(config, setup, iterations):
             print('iteration: ' + str(k), 'Loss u: ' + str(lu), 'Loss v: ' + str(lv))
             X = points.interioru
             predu = u_net(X)
-            print('L^1 norm ' + str(L_norm(X, predu, 1).item()))
+            L1 = L_norm(X, predu, 1).item()
+            tune.report(L1=L1)
+            print('L^1 norm ' + str(L1))
+            print('Relative Error ' + str.format('{0:.3f}', rel_err(X, predu)) + '%')
+            #proj(u_net, axes=[0, 5])
 
+
+train(params)
 
 '''
-# The code below allows us to evaluate what the loss function will give when u is the true solution
-points = Comb_loader(setup['boundary_sample_size'], setup['domain_sample_size'], setup['dim'])
-h, f, g, a, b = funcs(points, setup)
-Loss = loss(points.border, config['alpha'], a, b, h, f, g, setup, points.init.to(device))
+analysis = tune.run(
+    train,
+    num_samples=100,
+    scheduler=ASHAScheduler(metric="L1", mode="min", grace_period=200, max_t=2e4),
+    config=params,
+    verbose=3,
+    resources_per_trial={"cpu": 1, "gpu": 0.25},
+    keep_checkpoints_num=1,
+    checkpoint_score_attr="min-L1",
+    resume=False
+)
 
-interioru = [i.to(device).requires_grad_(True) for i in points.interioru]
-interiorv = [i.to(device).requires_grad_(True) for i in points.interiorv]
-
-xt = torch.Tensor(setup['domain_sample_size'], 0).to(device).requires_grad_(True)
-for i in interioru:
-    xt = torch.cat((xt, i), 1)
-
-xt.retain_grad()
-
-v_net = discriminator(config)
-
-print(Loss.I(func_u_sol(xt).unsqueeze(1), v_net(interiorv), 0, interioru, interiorv, func_u_sol, v_net))
-print(Loss.int(func_u_sol(xt).unsqueeze(1), v_net(interiorv), 0, interioru, interiorv, func_u_sol, v_net))
-# initial loss and boundary loss obviously work
-#'''
-
-train(config, setup, 11)
+best_trial = analysis.get_best_trial(metric="L1", mode="min", scope='all')
+'''
