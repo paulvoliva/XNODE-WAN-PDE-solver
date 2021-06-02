@@ -402,12 +402,12 @@ class loss:
         N = self.initialps.shape[0]
         init = [self.initialps[ind * N:(ind + 1) * N, i].unsqueeze(1) for i in range(setup['dim'])]
         init.append(self.T0 * torch.ones(init[0].shape[0], 1).to(device))
-        return torch.mean((u_net(init) - self.h[ind * N:(ind + 1) * N]) ** 2)
+        return torch.mean((u_net(init) - self.h[ind * N:(ind + 1) * N].unsqueeze(1)) ** 2)
 
     # initially had all variables feed with grad
     def bdry(self, ind, u_net, N, border):
         return torch.mean(
-            (u_net([border[ind * N:(ind + 1) * N, i].unsqueeze(1) for i in range(setup['dim'] + 1)]) - self.g[ind * N:(ind + 1) * N].unsqueeze(1)) ** 2)
+            (u_net([border[ind * N:(ind + 1) * N, i].unsqueeze(1).requires_grad_() for i in range(setup['dim'] + 1)]) - self.g[ind * N:(ind + 1) * N].unsqueeze(1)) ** 2)
 
     def int(self, y_output_u, y_output_v, ind, X, XV, u_net, v_net):
         # x needs to be the set of points set plugged into net_u and net_v
@@ -417,8 +417,7 @@ class loss:
 
     def u(self, y_output_u, y_output_v, ind, u_net, v_net, X, XV, border):
         N = y_output_u.shape[0]
-        return self.int(y_output_u, y_output_v, ind, X, XV, u_net, v_net) + torch.mul((
-                self.init(u_net, ind) + self.bdry(ind, u_net, N, border)), self.alpha)
+        return self.int(y_output_u, y_output_v, ind, X, XV, u_net, v_net) + torch.mul((self.init(u_net, ind) + self.bdry(ind, u_net, N, border)), self.alpha) #
 
     def v(self, y_output_u, y_output_v, ind, X, XV, u_net, v_net):
         return torch.mul(self.int(y_output_u, y_output_v, ind, X, XV, u_net, v_net), -1)
@@ -532,6 +531,7 @@ def train(params, checkpoint_dir=None):
 
         for i in range(n1):
             for ind, data in enumerate(ds):
+                optimizer_u.zero_grad()
                 border = data[-1].squeeze(0).to(device).requires_grad_(True)
                 data = [data[i].squeeze(0).to(device).requires_grad_(True) for i in range(2 * setup['dim'] + 2)]
                 X = data[:setup['dim'] + 1]
@@ -540,20 +540,19 @@ def train(params, checkpoint_dir=None):
                 prediction_u = u_net(X)
                 loss_u = Loss.u(prediction_u, prediction_v, ind, u_net, v_net, X, XV, border)
                 # writer.add_scalar("Loss", loss_u, k)
-                optimizer_u.zero_grad()
                 loss_u.backward(retain_graph=True)
                 optimizer_u.step()
             scheduler_u.step(loss_u)
 
         for j in range(n2):
             for ind, data in enumerate(ds):
+                optimizer_v.zero_grad()
                 data = [data[i].squeeze(0).to(device).requires_grad_(True) for i in range(2 * setup['dim'] + 2)]
                 X = data[:setup['dim'] + 1]
                 XV = data[setup['dim'] + 1: 2 * setup['dim'] + 2]
                 prediction_v = v_net(XV)
                 prediction_u = u_net(X)
                 loss_v = Loss.v(prediction_u, prediction_v, ind, X, XV, u_net, v_net)
-                optimizer_v.zero_grad()
                 loss_v.backward(retain_graph=True)
                 optimizer_v.step()
             scheduler_v.step(loss_v)
@@ -567,7 +566,8 @@ def train(params, checkpoint_dir=None):
             tune.report(L1=L1)
             print('L^1 norm ' + str(L1))
             print('Relative Error ' + str.format('{0:.3f}', rel_err(X, predu)) + '%')
-            proj(u_net, axes=[0, 5])
+            proj(u_net, axes=[0, 5], resolution=200)
+
 
 train(params)
 
