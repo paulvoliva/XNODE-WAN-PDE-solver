@@ -76,19 +76,18 @@ def func_c(y_output_u):
     return -y_output_u
 
 
-def func_a(xt, i, j):
-    if i == j:
-        return torch.ones(xt.shape[0], 1)
-    else:
-        return torch.zeros(xt.shape[0], 1)
+def func_a(xt):
+    a = torch.diag(torch.ones(setup['dim'])).unsqueeze(2).repeat(1, 1, xt.shape[0]).to(device)
+    return a
 
 
-def func_b(xt, i):
-    return torch.zeros(xt.shape[0], 1)
+def func_b(xt):
+    return torch.zeros(xt.shape[0], setup['dim']).to(device)
 
 
 def func_w(x):
     # again we assume that the domain is a hypercube and specifically that the boundaries are 1 and -1
+
 
     disttop = torch.min(torch.abs(1-x), dim=1).values
     distbot = torch.min(torch.abs(-1-x), dim=1).values
@@ -212,18 +211,12 @@ def funcs(points, setup):
     g = func_g(points.border.to(device))
 
     # this is meant to be a d by d-dimensional array containing domain_sample_size by 1 tensors
-    a = torch.Tensor(setup['dim'], setup['dim'], setup['domain_sample_size'], 1)
-
-    for i, j in product(range(setup['dim']), repeat=2):
-        a[i, j] = func_a(xt, i, j)
+    a = func_a(xt.to(device))
 
     # this is meant to be a d-dimensional containing domain_sample_size by 1 tensors
-    b = torch.Tensor(setup['dim'], setup['domain_sample_size'], 1)
+    b = func_b(xt.to(device))
 
-    for i in range(setup['dim']):
-        b[i] = func_b(xt, i)
-
-    return h, f, g, a.to(device), b.to(device)
+    return h, f, g, a, b
 
 
 """# Defining the Model"""
@@ -361,7 +354,7 @@ class loss:
         self.setup = setup
         self.c = c
         self.initialps = initialps
-        self.V = 1  # Volume of \Omega
+        self.V = 2 ** setup['dim']  # Volume of \Omega
 
     def I(self, y_output_u, y_output_v, ind, X, XV, u_net, v_net):
         y_output_u.retain_grad()
@@ -385,10 +378,10 @@ class loss:
         init.append(self.T0 * torch.ones(init[0].shape[0], 1).to(device))
         s1 = self.V * (u_net(fin) * v_net(fin) - self.h[ind * N:(ind + 1) * N].unsqueeze(1) * v_net(init)) / N
         s2 = (self.T - self.T0) * self.V * (y_output_u * dphi['dphi_2']) / N
-        s31 = [self.a[i, j, ind * N:(ind + 1) * N, :] * dphi['dphi_' + str(i)] * du['du_' + str(j)] for i, j in
+        s31 = [self.a[i, j, ind * N:(ind + 1) * N].unsqueeze(1) * dphi['dphi_' + str(i)] * du['du_' + str(j)] for i, j in
                product(range(self.setup['dim']), repeat=2)]
         s31 = np.sum(s31)
-        s32 = np.sum([self.b[i, ind * N:(ind + 1) * N, :] * phi * du['du_' + str(i)] for i in range(self.setup['dim'])])
+        s32 = np.sum([self.b[ind * N:(ind + 1) * N, i].unsqueeze(1) * phi * du['du_' + str(i)] for i in range(self.setup['dim'])])
         c = self.c(y_output_u)
         s3f = s31 + s32 + c * y_output_u * phi + self.f[ind * N:(ind + 1) * N].unsqueeze(1) * phi
         s3c = (self.T - self.T0) * self.V / N
@@ -426,13 +419,13 @@ class loss:
 ''' # Auxillary Funcs '''
 
 
-def L_norm(X, predu, p):
+def L_norm(X, predu, p, T0=0, T=1):
     # p is the p in L^p
     xt = torch.Tensor(X[0].shape[0], 0)
     for i in X:
         xt = torch.cat((xt, i), 1)
     u_sol = func_u_sol(xt).to(device)
-    return (torch.mean(torch.pow(torch.abs(u_sol - predu), p))) ** (1 / p)
+    return ((T-T0) * 2 ** setup['dim'] * torch.mean(torch.pow(torch.abs(u_sol - predu), p))) ** (1 / p)
 
 
 def rel_err(X, predu):
@@ -444,7 +437,7 @@ def rel_err(X, predu):
     return 100 * torch.mean(rel).item()
 
 
-def proj(u_net, axes=[0, 1], down=-1, up=1, T=1, T0=0, n=setup['boundary_sample_size'], save=False, resolution=100):
+def proj(u_net, axes=[0, 1], down=-1, up=1, T=1, T0=0, save=False, resolution=100, colours=8):
     # Assumes hypercube
     assert len(axes) == 2, 'There can only be two axes in the graph to be able to display them'
 
@@ -474,9 +467,9 @@ def proj(u_net, axes=[0, 1], down=-1, up=1, T=1, T0=0, n=setup['boundary_sample_
 
     plt.clf()
     fig, ax = plt.subplots(3)
-    aset = ax[0].contourf(x_mesh.numpy(), t_mesh.numpy(), u_sol.view(resolution, resolution).cpu().numpy())
-    bset = ax[1].contourf(x_mesh.numpy(), t_mesh.numpy(), predu.view(resolution, resolution).cpu().numpy())
-    cset = ax[2].contourf(x_mesh.numpy(), t_mesh.numpy(), error.view(resolution, resolution).cpu().numpy())
+    aset = ax[0].contourf(x_mesh.numpy(), t_mesh.numpy(), u_sol.view(resolution, resolution).cpu().numpy(), colours)
+    bset = ax[1].contourf(x_mesh.numpy(), t_mesh.numpy(), predu.view(resolution, resolution).cpu().numpy(), colours)
+    cset = ax[2].contourf(x_mesh.numpy(), t_mesh.numpy(), error.view(resolution, resolution).cpu().numpy(), colours)
     fig.colorbar(aset, ax=ax[0])
     fig.colorbar(bset, ax=ax[1])
     fig.colorbar(cset, ax=ax[2])
@@ -532,7 +525,6 @@ def train(params, checkpoint_dir=None):
         for i in range(n1):
             for ind, data in enumerate(ds):
                 optimizer_u.zero_grad()
-                border = data[-1].squeeze(0).to(device).requires_grad_(True)
                 data = [data[i].squeeze(0).to(device).requires_grad_(True) for i in range(2 * setup['dim'] + 2)]
                 X = data[:setup['dim'] + 1]
                 XV = data[setup['dim'] + 1: 2 * setup['dim'] + 2]
@@ -565,8 +557,10 @@ def train(params, checkpoint_dir=None):
             L1 = L_norm(X, predu, 1).item()
             tune.report(L1=L1)
             print('L^1 norm ' + str(L1))
-            print('Relative Error ' + str.format('{0:.3f}', rel_err(X, predu)) + '%')
-            proj(u_net, axes=[0, 5], resolution=200)
+            # print('Relative Error ' + str.format('{0:.3f}', rel_err(X, predu)) + '%') this error needs to be amended
+            if k % 50 == 0:
+                proj(u_net, axes=[0, 5], resolution=200, colours=20)
+
 
 
 train(params)
