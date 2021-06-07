@@ -256,9 +256,7 @@ class generator(torch.nn.Module):
         ])
 
     def forward(self, X):
-        inp = torch.Tensor(X[0].shape[0], 0).to(device)
-        for i in range(setup['dim'] + 1):
-            inp = torch.cat((inp, X[i]), 1)
+        inp = torch.cat(tuple(X), 1).to(device)
         x = self.net(inp.view(-1, setup['dim'] + 1))
         return x
 
@@ -294,15 +292,13 @@ class discriminator(torch.nn.Module):
         self.net.cuda()
 
     def forward(self, XV):
-        inp = torch.Tensor(XV[0].shape[0], 0).to(device)
-        for i in range(setup['dim'] + 1):
-            inp = torch.cat((inp, XV[i]), 1)
+        inp = torch.cat(tuple(XV), 1).to(device)
         x = self.net(inp.view(-1, setup['dim'] + 1))
         return x
 
     def backward(self, retain_graph=True):
         self.loss.backward(retain_graph=retain_graph)
-        return (self.loss)
+        return self.loss
 
 
 # Hyperparameters
@@ -421,20 +417,16 @@ class loss:
 
 def L_norm(X, predu, p, T0=0, T=1):
     # p is the p in L^p
-    xt = torch.Tensor(X[0].shape[0], 0)
-    for i in X:
-        xt = torch.cat((xt, i), 1)
-    u_sol = func_u_sol(xt).to(device)
+    xt = torch.cat(tuple(X), 1)
+    u_sol = func_u_sol(xt).unsqueeze(1).to(device)
     return ((T-T0) * 2 ** setup['dim'] * torch.mean(torch.pow(torch.abs(u_sol - predu), p))) ** (1 / p)
 
 
 def rel_err(X, predu):
-    xt = torch.Tensor(X[0].shape[0], 0)
-    for i in X:
-        xt = torch.cat((xt, i), 1)
+    xt = torch.cat(tuple(X), 1)
     u_sol = func_u_sol(xt).to(device).unsqueeze(1)
-    rel = torch.abs(torch.div(u_sol - predu, u_sol))
-    return 100 * torch.mean(rel).item()
+    rel = torch.abs(torch.div(torch.mean(u_sol - predu), torch.mean(u_sol)))
+    return 100 * rel.item()
 
 
 def proj(u_net, axes=[0, 1], down=-1, up=1, T=1, T0=0, save=False, resolution=100, colours=8):
@@ -486,6 +478,8 @@ def proj(u_net, axes=[0, 1], down=-1, up=1, T=1, T0=0, save=False, resolution=10
 
 params = {**config, **setup, **{'iterations': int(2e4 + 1)}}
 
+''' # Training function '''
+
 
 def train(params, checkpoint_dir=None):
     i = iter(params.items())
@@ -513,7 +507,7 @@ def train(params, checkpoint_dir=None):
 
         border = points.border.detach().to(device).requires_grad_(True)
 
-        Loss = loss(config['alpha'], a, b, h, f, g, setup, points.init)
+        Loss = loss(config['alpha'], a, b, h, f, g, setup, points.init.to(device).requires_grad_(True))
 
         # optimizers for WAN
         optimizer_u = torch.optim.Adam(u_net.parameters(), lr=config['u_rate'])
@@ -532,6 +526,7 @@ def train(params, checkpoint_dir=None):
                 prediction_u = u_net(X)
                 loss_u = Loss.u(prediction_u, prediction_v, ind, u_net, v_net, X, XV, border)
                 # writer.add_scalar("Loss", loss_u, k)
+                # TODO: check that the loss actually works
                 loss_u.backward(retain_graph=True)
                 optimizer_u.step()
             scheduler_u.step(loss_u)
@@ -557,10 +552,9 @@ def train(params, checkpoint_dir=None):
             L1 = L_norm(X, predu, 1).item()
             tune.report(L1=L1)
             print('L^1 norm ' + str(L1))
-            # print('Relative Error ' + str.format('{0:.3f}', rel_err(X, predu)) + '%') this error needs to be amended
+            print('Relative Error ' + str.format('{0:.3f}', rel_err(X, predu)) + '%')
             if k % 50 == 0:
                 proj(u_net, axes=[0, 5], resolution=200, colours=20)
-
 
 
 train(params)
