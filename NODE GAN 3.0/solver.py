@@ -145,16 +145,16 @@ class Comb_loader(Dataset):
         t[:, 0, :] = T0 * torch.ones_like(t[:, 0, :])
         t[:, -1, :] = T * torch.ones_like(t[:, 0, :])
 
-        X = [torch.Tensor(self.npaths, self.t_mesh_size, 1).uniform_(down, up).requires_grad_(True) for i in range(dim)]
+        X = [torch.Tensor(self.npaths, 1, 1).uniform_(down, up).repeat(1, self.t_mesh_size, 1).requires_grad_(True) for i in range(dim)]
         X.append(t.requires_grad_(True))
-        XV = [torch.Tensor(self.npaths, self.t_mesh_size, 1).uniform_(down, up).requires_grad_(True) for i in range(dim)]
+        XV = [torch.Tensor(self.npaths, 1, 1).uniform_(down, up).repeat(1, self.t_mesh_size, 1).requires_grad_(True) for i in range(dim)]
         XV.append(t.detach().clone().requires_grad_(True))
 
         ups = up * torch.ones(self.bnpaths, self.t_mesh_size, 1)
         downs = down * torch.ones(self.bnpaths, self.t_mesh_size, 1)
 
-        sd = [torch.cat((torch.Tensor(self.bnpaths, self.t_mesh_size, i).uniform_(down, up), downs.clone(), torch.Tensor(self.bnpaths, self.t_mesh_size, dim - 1 - i).uniform_(down, up)), 2) for i in range(dim)]
-        su = [torch.cat((torch.Tensor(self.bnpaths, self.t_mesh_size, i).uniform_(down, up), ups.clone(), torch.Tensor(self.bnpaths, self.t_mesh_size, dim - 1 - i).uniform_(down, up)), 2) for i in range(dim)]
+        sd = [torch.cat((torch.Tensor(self.bnpaths, 1, i).uniform_(down, up).repeat(1, self.t_mesh_size, 1), downs.clone(), torch.Tensor(self.bnpaths, 1, dim - 1 - i).uniform_(down, up).repeat(1, self.t_mesh_size, 1)), 2) for i in range(dim)]
+        su = [torch.cat((torch.Tensor(self.bnpaths, 1, i).uniform_(down, up).repeat(1, self.t_mesh_size, 1), ups.clone(), torch.Tensor(self.bnpaths, 1, dim - 1 - i).uniform_(down, up).repeat(1, self.t_mesh_size, 1)), 2) for i in range(dim)]
 
         btxy = torch.cat(tuple(sd + su), 0)
 
@@ -277,9 +277,9 @@ config = {
     'v_hidden_dim': 50,
     'n1': 2,
     'n2': 1,
-    'u_rate': 0.015,  #tune.loguniform(0.01, 0.2),
+    'u_rate': 1/(2e4), #0.015,  #tune.loguniform(0.01, 0.2),
     'v_rate': 0.04,  #tune.loguniform(0.01, 0.2),
-    'u_factor': 0.5
+    'u_factor': 1-1e-10
 }
 
 
@@ -370,7 +370,7 @@ def train(params, checkpoint_dir=None):
     optimizer_u = torch.optim.Adam(u_net.parameters(), lr=config['u_rate'])
     optimizer_v = torch.optim.Adam(v_net.parameters(), lr=config['v_rate'])
 
-    scheduler_u = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer_u, factor=config['u_factor'], patience=0)
+    scheduler_u = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer_u, factor=config['u_factor'], patience=15)
 
     losses = []
 
