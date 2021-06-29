@@ -77,8 +77,8 @@ class _NRDECell(nn.Module):
 
     def forward(self, t, h):
         A = self.func(h).squeeze(2)
-        device = A.device
-        output = torch.bmm(A, torch.ones(A.shape[0], A.shape[2], 1).to(device)).squeeze(2)
-        return output
+        #device = A.device
+        #output = torch.bmm(A, torch.ones(A.shape[0], A.shape[2], 1).to(device)).squeeze(2)
+        return A
 
 

@@ -15,7 +15,7 @@ from ray import tune
 from ray.tune.schedulers import ASHAScheduler
 from torch.utils.tensorboard import SummaryWriter
 import numpy as np
-import matplotlib as plt
+import matplotlib.pyplot as plt
 
 
 # Here we set up some of the packages we will use
@@ -269,15 +269,15 @@ class discriminator(torch.nn.Module):
 # Hyperparameters
 
 config = {
-    'alpha': 1e4 * 40 * 25,  #tune.loguniform(1e4, 1e7),   #
-    'u_layers': 8,
-    'u_hidden_dim': 20,
-    'u_hidden_hidden_dim': 10,
+    'alpha': 1e4 * 400 * 25,  #tune.loguniform(1e4, 1e7),   #
+    'u_layers': 5,
+    'u_hidden_dim': 10,
+    'u_hidden_hidden_dim': 20,
     'v_layers': 9,
     'v_hidden_dim': 50,
     'n1': 2,
     'n2': 1,
-    'u_rate': 1/(2e4), #0.015,  #tune.loguniform(0.01, 0.2),
+    'u_rate': 0.015, #1/(9e2), #0.015,  #tune.loguniform(0.01, 0.2),
     'v_rate': 0.04,  #tune.loguniform(0.01, 0.2),
     'u_factor': 1-1e-10
 }
@@ -297,14 +297,15 @@ def rel_err(X, predu):
     rel = torch.abs(torch.div(torch.mean(u_sol - predu), torch.mean(u_sol)))
     return rel
 
-'''
+#'''
 def proj(u_net, axes=[0, 1], down=-1, up=1, T=1, T0=0, save=False, resolution=100, colours=8):
     # Assumes hypercube
     assert len(axes) == 2, 'There can only be two axes in the graph to be able to display them'
+    assert axes[0] == 0, 'For the ODEINT case we can only currently plot time against a spatial coordinate'
 
     xt = torch.Tensor(resolution, resolution, setup['dim'] + 1)
 
-    if setup['dim'] in axes:
+    if 0 in axes:
         t_mesh = torch.linspace(T0, T, resolution)
     else:
         t_mesh = torch.linspace(down, up, resolution)
@@ -312,19 +313,16 @@ def proj(u_net, axes=[0, 1], down=-1, up=1, T=1, T0=0, save=False, resolution=10
 
     x_mesh = torch.linspace(down, up, resolution)
     mesh1, mesh2 = torch.meshgrid(x_mesh, t_mesh)
-    mesh1_, mesh2_ = mesh1.reshape(-1, 1), mesh2.reshape(-1, 1)
-    mesh = torch.cat((mesh1_, mesh2_), dim=1)
+    xt[:,:,0] = mesh2
+    xt[:,:,axes[1]] = mesh1
 
-    for i in axes:
-        xt[:, i] = mesh[:, axes.index(i)]
-
-    for i in list(set(range(setup['dim'])) - set(axes)):
-        xt[:, i] = up * torch.ones(resolution ** 2)
+    for i in list(set(range(setup['dim']+1)) - set(axes)):
+        xt[:, :, i] = up * torch.ones(resolution, resolution)
 
     u_sol = func_u_sol(xt).to(device)
-    predu = u_net([xt[:, i].unsqueeze(1) for i in range(setup['dim'] + 1)]).to(device).detach()
+    predu = u_net((xt[:,0,:], xt)).to(device).detach()
 
-    error = predu - u_sol.unsqueeze(1)
+    error = predu - u_sol.unsqueeze(2)
 
     plt.clf()
     fig, ax = plt.subplots(3)
@@ -341,7 +339,7 @@ def proj(u_net, axes=[0, 1], down=-1, up=1, T=1, T0=0, save=False, resolution=10
     if save:
         plt.savefig('plot_dim_' + str(axes[0]) + '_+_' + str(axes[1]) + '.png')
         print('Saved')
-'''
+#'''
 
 ''' # Training '''
 
@@ -384,7 +382,7 @@ def train(params, checkpoint_dir=None):
         Loss = loss(config['alpha'], a, b, h, f, g, setup, points.init.to(device).requires_grad_(True), func_c)
 
         for i in range(n1):
-            for ind, (data, bdata) in enumerate(dl):
+             for ind, (data, bdata) in enumerate(dl):
                 optimizer_u.zero_grad()
                 prediction_v = v_net(points.interiorv)
                 prediction_u = u_net(data)
@@ -416,8 +414,8 @@ def train(params, checkpoint_dir=None):
             print('L^1 norm ' + str(L1))
             #print('Relative Error ' + str.format('{0:.3f}', rel_err(points.interioru, prediction_u)) + '%')
             print('Learning rate ' + str(optimizer_u.param_groups[0]['lr']))
-            #if k % 50 == 0:
-                #proj(u_net, axes=[0, 5], resolution=200, colours=20)
+            if k % 50 == 0:
+                proj(u_net, axes=[0, 1], resolution=200, colours=20)
 
 
 

@@ -113,11 +113,11 @@ class _NRDEFunc(nn.Module):
             nn.Linear(input_dim, hidden_dim),
             *additional_layers,
             nn.Tanh(),
-            nn.Linear(hidden_dim, input_dim * logsig_dim),
+            nn.Linear(hidden_dim, input_dim), #* logsig_dim),
         ]) if num_layers > 0 else nn.Linear(input_dim, input_dim * logsig_dim)
 
     def forward(self, h):
-        return self.net(h).view(-1, self.input_dim, self.logsig_dim)
+        return self.net(h).view(-1, self.input_dim, 1) #self.logsig_dim)
 
 
 if __name__ == '__main__':
