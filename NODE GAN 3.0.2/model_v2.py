@@ -64,7 +64,7 @@ class NeuralODE(nn.Module):
         self.initial_layers = nn.Sequential(*[nn.Linear(1, hidden_dim), nn.ReLU(), nn.Linear(hidden_dim, hidden_dim), nn.ReLU(), nn.Linear(hidden_dim, hidden_dim)]).double()
 
         # The net applied to h_prev
-        self.func = _NODEFunc(hidden_dim, logsig_dim, setup, hidden_dim=hidden_hidden_dim, num_layers=num_layers)
+        self.func = _NODEFunc(hidden_dim, logsig_dim, setup, hidden_dim=hidden_hidden_dim, num_layers=num_layers) #####?
         self.func.apply(init_weights)
 
         # Linear classifier to apply to final layer
@@ -102,7 +102,7 @@ class _NODEFunc(nn.Module):
     and the output dim must be of size `input_dim * ??_dim`. Simply reshape the output onto a tensor of size
     `[batch, input_dim, ??]`.
     """
-    def __init__(self, input_dim, logsig_dim, setup, num_layers=1, hidden_dim=15):
+    def __init__(self, input_dim, logsig_dim, setup, num_layers=1, hidden_dim=15): #####delete?
         super().__init__()
         self.input_dim = input_dim
         self.logsig_dim = logsig_dim ###do we need it?
