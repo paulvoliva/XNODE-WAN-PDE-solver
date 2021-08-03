@@ -1,7 +1,7 @@
 """
 model_v2.py
 ===========================
-This contains a model class for NeuralRDEs that wraps `odeint_` as a `nn.Module`.
+This contains a model class for NeuralODEs that wraps `odeint_` as a `nn.Module`.
 """
 import torch
 from torch import nn
@@ -19,7 +19,7 @@ class NeuralODE(nn.Module):
     and computes the updated hidden dynamics through a call to `ode_int` using the `NeuralODECell` as the function that
     computes the update.
 
-    Here we model the dynamics of some abstract hidden state H via a CDE, and the response as a linear functional of the
+    Here we model the dynamics of some abstract hidden state H via a ODE, and the response as a linear functional of the
     hidden state, that is:
         dH = f(H)dX;    Y = L(H).
     """
