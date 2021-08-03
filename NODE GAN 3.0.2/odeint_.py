@@ -10,7 +10,7 @@ import bisect
 
 
 def odeint_(timesteps, h0, func, x, method='rk4', adjoint=False, return_sequences=False):
-    """Analogous to odeint but for RDEs.
+    """Analogous to odeint but for ODEs.
 
     Note that we do not have time intervals here. This is because the log-ode method is always evaluated on [0, 1] and
     thus are grid is always [0, 1, ..., num_intervals+1].
@@ -28,7 +28,7 @@ def odeint_(timesteps, h0, func, x, method='rk4', adjoint=False, return_sequence
     """
 
     # A cell to apply the output of the function linearly to correct log-signature piece.
-    cell = _NRDECell(func, x)
+    cell = _NODECell(func, x)
 
     # Solve
     odeint_func = odeint_adjoint if adjoint else odeint
