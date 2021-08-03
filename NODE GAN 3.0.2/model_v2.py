@@ -1,11 +1,11 @@
 """
-model.py
+model_v2.py
 ===========================
 This contains a model class for NeuralRDEs that wraps `odeint_` as a `nn.Module`.
 """
 import torch
 from torch import nn
-from odeint import odeint_
+from odeint_ import odeint_
 
 def init_weights(layer):
     if type(layer) == nn.Linear:
