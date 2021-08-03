@@ -3,8 +3,8 @@ from data.scalers import TrickScaler
 from data.intervals import FixedIntervalSampler, RandomSampler, BatchIntervalSampler, create_interval_dataloader
 from loss import loss
 from data.functions import torch_ffill
-
 from model import NeuralRDE
+#from model_v2 import NeuralODE
 import signatory
 import itertools
 import math
@@ -364,6 +364,8 @@ def train(params, checkpoint_dir=None):
 
     # neural network models
     u_net = torch.nn.DataParallel(NeuralRDE(points.input_dim, config["u_hidden_dim"], 1, func_h, hidden_hidden_dim=config['u_hidden_hidden_dim'], num_layers=config['u_layers'], return_sequences=True).to(device)).to(device)
+    #u_net = torch.nn.DataParallel(NeuralODE(points.input_dim, config["u_hidden_dim"], 1, func_h, hidden_hidden_dim=config['u_hidden_hidden_dim'], num_layers=config['u_layers'], return_sequences=True).to(device)).to(device)
+
     v_net = torch.nn.DataParallel(discriminator(config)).to(device)
 
     u_net.apply(init_weights)
