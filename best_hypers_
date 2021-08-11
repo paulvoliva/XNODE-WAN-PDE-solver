@@ -1,1 +1,0 @@
- {'alpha': 3968.4592667982465, 'u_layers': 7, 'u_hidden_dim': 20, 'v_layers': 7, 'v_hidden_dim': 50, 'n1': 10, 'n2': 5, 'u_rate': 0.0013236360883206782, 'v_rate': 0.001633250638370098, 'iteration': 4000, 'subiteration': 10, 'u_factor': 0.7560097489175399, 'v_factor': 0.3966897647521889}
