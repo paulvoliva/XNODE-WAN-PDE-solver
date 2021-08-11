@@ -8,7 +8,17 @@ for a d-dimensional domain.
 # Running Codes
 Requirements for a successful implementation of the codes can be found in `requirements.txt`.
 
-To solve a PDE one can input all the known functions of the problem in the file `main.py` which will run the algorithm. An example of this in action can be found in the `example.py` file in which our test problem from the paper is implemented. 
+To solve a PDE one can input all the known functions of the problem in the file `main.py` which will run the algorithm. An example of this in action can be found in the `example.py` file in which our test problem from the paper is implemented.
+
+In the `config` dictionary one can specify the hyperparameters to be used by the algorithm to solve the problem. 
+
+In the `setup` dictionary the problem specific information is included:
+- `dim`: the dimension of our problem's domain (excluding time)
+- `N_t`: the number of time points sampled for each path
+- `N_r`: the number of paths in the interior of the domain
+- `N_b`: the number of paths on the boundary of the domain
+- `T0`: the minimum time at which our domain exists
+- `T`: the maximum time at which our domain exists
 
 # Domains
 The algorithm supports a wide variety of domains, including time-varying ones, and these can be specified in the `dataset.py` file which already contains some examples. It is important to conform to the structure highlighted in this file to guarantee that the algorithm works.
