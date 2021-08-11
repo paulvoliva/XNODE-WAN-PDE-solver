@@ -66,12 +66,12 @@ def func_c(X, y_output_u):
 # dictionary with all the configurations of meshes and the problem dimension
 
 setup = {
-    'dim': 5,
-    'N_t': 20,
-    'N_r': 400,
-    'N_b': 400,
-    'T0': 0,
-    'T': 1
+    'dim': 5,   # int: dimension of the problem
+    'N_t': 20,  # int: number of time samples
+    'N_r': 400, # int: number of spatial samples in the interior
+    'N_b': 400, # int: number of spatial samples on the boundary
+    'T0': 0,    # float: initial time
+    'T': 1      # float: final time
 }
 
 # hyperparameters
