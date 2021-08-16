@@ -31,7 +31,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 # Setting the specific problem to solve
 '''
 
-
+#He. The input X: torch tensor with size [? ? ?].
 def func_u_sol(X):
     return 2 * torch.sin(math.pi / 2 * X[:, :, 1]) * torch.cos(math.pi / 2 * X[:, :, 2]) * torch.exp(-X[:, :, 0])
 
@@ -44,7 +44,7 @@ def func_f(X):
 def func_g(BX):
     return func_u_sol(BX)
 
-
+#He. The input X: torch tensor with size [? ?].
 def func_h(X):
     return 2 * torch.sin(math.pi / 2 * X[:, 1]) * torch.cos(math.pi / 2 * X[:, 2])
 
@@ -62,6 +62,7 @@ def func_b(X, i):
 
 # the following function can take into account the function u, so they have the input `y_output_u` which will be our
 # guess solution
+#He. comments not clear to me.
 
 def func_c(X, y_output_u):
     return -y_output_u
@@ -72,16 +73,16 @@ def func_c(X, y_output_u):
 # dictionary with all the configurations of meshes and the problem dimension
 
 setup = {
-    'dim': 5,
-    'N_t': 20,
-    'N_r': 400,
-    'N_b': 400,
-    'T0': 0,
-    'T': 1
+    'dim': 5, #He. spacial dimension
+    'N_t': 20, #He. number of points randomly sampled in the time domain [T0, T]?
+    'N_r': 400, #He. number of points randomly sampled in the interiori domain $D = \Omega \times[0, T]$.
+    'N_b': 400, #He. number of points randomly sampled in the domain boundaty $\partial D := \partial \Omega \times[0, T]$
+    'T0': 0, #He. Initial time
+    'T': 1 #He. Final (terminal) time
 }
 
 # Hyperparameters
-
+#He. Add the explaination for each hyperparameter below.
 config = {
     'alpha': 1e4 * 400 * 25,    # float
     'u_layers': 8,              # int
