@@ -37,7 +37,7 @@ V():            returns a float that is the volume of the domain
 class NSphere_Tcone:
     '''
     this class samples points in a hypersphere of radius r*(1-t)
-
+    Note this is a time-dependent domain.
     Args:
         r: radius at time T0 of hypersphere
     '''
@@ -49,7 +49,8 @@ class NSphere_Tcone:
         self.N_t = N_t
         self.times, i = torch.sort(torch.Tensor(self.N_t).uniform_(T0, T), 0)
         self.times[0], self.times[-1] = T0, T
-
+    
+    #He. Some explaination here is needed. I am lost.
     def surf(self, N: int):
         normal_deviates = np.random.normal(size=(self.dim, N))
 
@@ -101,10 +102,11 @@ class NSphere_Tcone:
 class Hypercube:
     '''
     this class samples points in a hypercube from (bot,..., bot) to (top,...,top)
+    Note that the domain is time-independent.
 
     Args:
-        top: as above the value of the top coordinate
-        bot: as above the value of the bottom coordinate
+        top: float, the value of the top coordinate of the cube
+        bot: float, the value of the bottom coordinate of the cube
     '''
     def __init__(self, top: float, bot: float, dim: int, T0: float, T: float, N_t: int):
         assert top > bot, "The hypercube needs to have volume"
@@ -118,39 +120,47 @@ class Hypercube:
         self.times[0], self.times[-1] = T0, T
 
     def interior(self, N_r: int):
-        init = torch.Tensor(N_r, 1, self.dim).uniform_(self.bot, self.top)
-        x = init.repeat(1, self.N_t, 1)
-        xt = torch.cat((self.times.unsqueeze(1).repeat(N_r, 1, 1), x), dim=2)
-        return xt
+        #init = torch.Tensor(N_r, 1, self.dim).uniform_(self.bot, self.top)
+        #x = init.repeat(1, self.N_t, 1)
+        #xt = torch.cat((self.times.unsqueeze(1).repeat(N_r, 1, 1), x), dim=2)
+        
+        #He. I suggest change the above three lines to the bottom for better clarity and consistency.
+        x = torch.Tensor(N_r, 1, self.dim).uniform_(self.bot, self.top).repeat(1, self.N_t, 1) #He. x.size = [N_r, N_t, self.dim]
+        t = self.times.unsqueeze(1).repeat(N_r, 1, 1) #He. t.size = [N_r, N_t, 1]
+        xt = torch.cat((t, x), dim=2)
+        return xt #He. xt.size = [N_r, N_t, self.dim + 1]
 
     def boundary(self, N_b: int):
-        t = self.times.unsqueeze(1).repeat(N_b, 1, 1)
-        x = torch.Tensor(N_b, 1, self.dim).uniform_(self.bot, self.top).repeat(1, self.N_t, 1)
-        xt = torch.cat((t, x), dim=2)
+        x = torch.Tensor(N_b, 1, self.dim).uniform_(self.bot, self.top).repeat(1, self.N_t, 1)  #He. x.size = [N_b, N_t, self.dim]
+        t = self.times.unsqueeze(1).repeat(N_b, 1, 1) #He. t.size = [N_b, N_t, 1]
+        xt = torch.cat((t, x), dim=2) #He. xt.size = [N_b, N_t, self.dim + 1]
+        
         tops = self.top * torch.ones(1, self.N_t, 1)
         bots = self.bot * torch.ones(1, self.N_t, 1)
         rand = torch.Tensor(N_b, 1, self.dim).uniform_(self.bot, self.top)
 
-        n = int(N_b / self.dim / 2)
+        n = int(N_b / self.dim / 2) #He. do you need to check at the beginning if N_b is a multiplier of self.dim*2?
         num = [n * i for i in range(2 * self.dim)]
         num[0] = 0
         num.append(N_b)
-
-        idx = torch.randperm(N_b)
-
+       
         for i in range(self.dim):
             xt[num[2 * i]:num[2 * i + 1], :, i + 1] = tops.repeat(num[2 * i + 1] - num[2 * i], 1, 1).squeeze()
             xt[num[2 * i + 1]:num[2 * i + 2], :, i + 1] = bots.repeat(num[2 * i + 2] - num[2 * i + 1], 1, 1).squeeze()
-
+        
+        idx = torch.randperm(N_b) #He. permute the boundary points.
+        
         return xt[idx]
 
     def func_w(self, x: torch.Tensor):
+        #He. what is the purpose of this function?
         disttop = torch.min(torch.abs(self.top - x), dim=2).values
         distbot = torch.min(torch.abs(self.bot - x), dim=2).values
         dist = torch.minimum(disttop, distbot)
         return dist
 
     def V(self):
+        #He. what is the purpose of this function?
         return (self.top - self.bot) ** self.dim * (self.T - self.T0)
 
 
@@ -166,14 +176,19 @@ class Comb_loader(Dataset):
         self.N_b = N_b
         self.shape = shape
         self.interioru = self.shape.interior(self.N_r)
-        self.interiorv = self.shape.interior(self.N_r)
-        self.boundary = self.shape.boundary(self.N_b)
+        self.interiorv = self.shape.interior(self.N_r) #He.if interioru = interiorv, why do we need to differentiate them? 
+        #He. For the v_net, I think it is better not to use the strucured sampling and instead we should use the random sampling.
+        #TODO: add a seperate dataloader class for v_net may be necessary.
+        self.boundary = self.shape.boundary(self.N_b)  #He. Here we don't differentiate boundary points for u and v.
+       
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-        m = min(len(self.interioru), len(self.interiorv))
-
+        m = min(len(self.interioru), len(self.interiorv)) 
+        
+        #He. what are we doing below? change the tensor into a list? why take the minimal?
         self.interior_u = [self.interioru[i] for i in range(m) if
                            self.interiorv[i].shape[1] == self.interioru[i].shape[1]] if isinstance(self.interioru, list) else self.interioru
+        #He. isinstance(self.interioru, list) should be false since self.interioru is a tensor? I am totally lost here.
         self.interior_v = [self.interiorv[i] for i in range(m) if
                            self.interiorv[i].shape[1] == self.interioru[i].shape[1]] if isinstance(self.interiorv, list) else self.interiorv
 
@@ -186,6 +201,6 @@ class Comb_loader(Dataset):
         data_u = self.interior_u[idx] if isinstance(self.interioru, list) else self.interior_u
         data_v = self.interior_v[idx] if isinstance(self.interioru, list) else self.interior_v
         boundary_ = self.boundary[idx] if isinstance(self.interioru, list) else self.boundary
-        m = min(len(data_v), len(data_u))
+        m = min(len(data_v), len(data_u))  #He. Why take the minimal again??
         r = (data_u[:m].to(self.device).requires_grad_(True), data_v[:m].to(self.device).requires_grad_(True), boundary_.to(self.device).requires_grad_(True))
         return r
