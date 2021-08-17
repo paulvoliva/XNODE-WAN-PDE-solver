@@ -21,6 +21,8 @@ In the `setup` dictionary the problem specific information is included:
 - `T`: the maximum time at which our domain exists
 
 ## Directly evaluating points
+Note that the data structure is `[N, L, C]` where `N` is the number of different points, `L` is the number of time points at which they are evaluated (these have to be the same for all points) and `C` is the axis of the dimensions where time is the top dimension (`[:, :, 0]` is the index for all times).
+
 There are certain complications in evaluating points and therefore the best method is to feed the network points to be evaluated individually. The form for single points (to ensure accurate computations) needs to be `torch.tensor([[x0, x]])` where `x` is the point you want to evaluate and `x0` has the same coordinates in $\mathbb{R}^d$ but the time coordinate is that at which this point in space is on $\patial\Omega_t$ (this includes all points with time `T0`).
 
 # Domains
