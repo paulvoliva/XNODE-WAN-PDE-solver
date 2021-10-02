@@ -5,6 +5,8 @@ Our algorithm uses NODE networks in a GAN architecture to solve the following BV
 
 for a d-dimensional domain. It is also able to handle time-varying domains, denoted $\Omega_t$.
 
+This repository is the official implementation of the paper entitled "Towards fast weak adversarial training to solve high dimensional parabolic partial differential equations using XNODE-WAN".
+
 # Running Codes
 Requirements for a successful implementation of the codes can be found in `requirements.txt`.
 
