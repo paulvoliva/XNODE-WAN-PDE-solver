@@ -2,7 +2,7 @@
 
 Due to the curse of dimensionality, solving high dimensional parabolic partial differential equations (PDEs) has been a challenging problem for decades. Recently, a weak adversarial network (WAN) proposed in [1] offers a flexible and computationally efficient approach to tackle this problem defined on arbitrary domains by leveraging the weak solution. WAN reformulates the PDE problem as a generative adversarial network, where the weak solution (primal network) and the test function (adversarial network) are parameterized by multi-layer deep neural networks (DNNs). 
 
-In our work, we design a novel so-called XNODE model built on the neural ODE model with additional spatial dependency for a universal and effective representation for the parabolic PDE solution. The proposed hybrid method (XNODE-WAN) by integrating the XNODE model within the WAN framework leads to significant improvement on the performance and efficiency of training. Numerical results show that our method can reduce the training time to a fraction of that of the WAN model. 
+In our work, we design a novel so-called XNODE model for a universal and effective representation for the parabolic PDE solution. Built on the neural ODE model, XNODE model is able to incoporate the priori information of the PDEs to the primal netwrok. The proposed hybrid method (XNODE-WAN) by integrating the XNODE model within the WAN framework leads to significant improvement on the performance and efficiency of training. Numerical results show that our method can reduce the training time to a fraction of that of the WAN model. 
 
 More specifically, our XNODE-WAN algorithm aims to solve the following BVP PDE:
 
