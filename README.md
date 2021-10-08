@@ -15,7 +15,7 @@ This repository is the official implementation of the paper entitled "Towards fa
 # Running Codes
 Requirements for a successful implementation of the codes can be found in `requirements.txt`.
 
-To solve a PDE one can input all the known functions of the problem in the file `main.py` which will run the algorithm. An example of this in action can be found in the `example.py` file in which our test problem from the paper is implemented.
+To solve a PDE one can input all the known functions of the problem in the file `main.py` which will run the algorithm. An example of this in action can be found in the `example.ipynb` file in which our test problem from the paper is implemented.
 
 In the `config` dictionary one can specify the hyperparameters to be used by the algorithm to solve the problem. 
 
