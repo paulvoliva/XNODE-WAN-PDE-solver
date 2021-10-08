@@ -4,7 +4,10 @@ import itertools
 import torch
 from itertools import product
 from utils.auxillary_funcs import proj, L_norm, rel_err
+from src.dataset import Comb_loader
 from src.dataset import *
+import time
+import json
 
 
 def func_eval(X: torch.Tensor, BX: torch.Tensor, setup: dict, y_output_u: torch.Tensor, func_a, func_b, func_c, func_h,
@@ -59,8 +62,8 @@ class NODE_WAN_solver:
         func_u_sol: the solution to our PDE if known
         p: if fun_u_sol is given the norm difference of our guess to the true solution in L^p is computed
     '''
-    def __init__(self, params: dict, func_a, func_b, func_c, func_h, func_f, func_g, device, stop=None, func_u_sol=None,
-                 p: float = 1):
+    def __init__(self, params: dict, func_a, func_b, func_c, func_h, func_f, func_g, device, path, stop=None,
+                 func_u_sol=None, p: float = 1):
         self.params = params
         self.func_a = func_a
         self.func_b = func_b
@@ -69,6 +72,7 @@ class NODE_WAN_solver:
         self.func_f = func_f
         self.func_g = func_g
         self.device = device
+        self.path = path
         self.stop = stop
         self.func_u_sol = func_u_sol
         self.p = p
@@ -77,7 +81,7 @@ class NODE_WAN_solver:
         self.config = dict(itertools.islice(i, 13))
         self.setup = dict(itertools.islice(i, 7))
         self.iterations = dict(itertools.islice(i, 1))['iterations']
-        self.domain = eval(dict(i)['domain'])
+        self.domain = eval(params['domain'])
         self.n1 = self.config['n1']
         self.n2 = self.config['n2']
 
@@ -86,10 +90,10 @@ class NODE_WAN_solver:
 
         # neural network models
         # TODO: apply parallel computing
-        self.u_net = NeuralODE(self.config['u_hidden_dim'], 1, self.func_h, self.func_g,
+        self.u_net = torch.nn.DataParallel(NeuralODE(self.config['u_hidden_dim'], 1, self.func_h, self.func_g,
                                                      self.setup, self.config['u_hidden_hidden_dim'],
                                                      self.config['u_layers'], domain, self.config['solver'],
-                                                     self.config['min_steps'], self.config['adjoint']).to(device) # torch.nn.DataParallel(
+                                                     self.config['min_steps'], self.config['adjoint'])).to(device) #
         self.v_net = torch.nn.DataParallel(discriminator(self.config, self.setup)).to(device)
 
         self.u_net.apply(init_weights)
@@ -109,10 +113,14 @@ class NODE_WAN_solver:
             report_it: after how many iterations to report
             show_plt: whether or not to show a plot
         '''
+        past_losses = []
+        times = [time.time()]
         for k in range(self.iterations):
             domain = self.domain(self.setup['shape_param'], self.setup['dim'], self.setup['T0'], self.setup['T'],
                                  self.setup['N_t'])
             points = Comb_loader(self.setup['N_r'], self.setup['N_b'], domain, self.device)
+
+            L2 = L_norm(points.interioru, self.u_net, self.p, self.func_u_sol, domain.V(), self.setup['N_r']).item()
 
             for i in range(self.n1):
                 self.av_l = 0
@@ -125,16 +133,20 @@ class NODE_WAN_solver:
                                                  self.func_f, self.func_g)
                     Loss = loss(self.config['alpha'], a, b, c, h, f, g, self.setup, domain, self.device)
                     loss_u = Loss.u(prediction_u, prediction_v, self.u_net, datau, datav, bdata)
-                    self.av_l += loss_u
+                    self.av_l += loss_u.item()
                     loss_u.backward(retain_graph=True)
-                self.optimizer_u.step()
+                    self.optimizer_u.step()
+                past_losses.append(self.av_l)
+                with open('losses_NODE_'+str(self.setup['dim'])+'.json', 'w') as f:
+                    json.dump(past_losses, f)
                 if self.stop is not None and self.stop(self, points.interioru, domain):
-                    torch.save(self.u_net.state_dict(), 'best_model_weights.pth')
+                    torch.save(self.u_net.state_dict(), self.path + 'best_model_weights_NODE.pth')
                     print('Stopping Criterion Reached')
                     exit()
 
-                if self.av_l.item() < self.best_l:
-                    torch.save(self.u_net.state_dict(), 'best_model_weights.pth')
+                if self.av_l < self.best_l:
+                    torch.save(self.u_net.state_dict(), 'best_model_weights_NODE.pth')
+                    self.best_l = self.av_l
 
             for j in range(self.n2):
                 self.optimizer_v.zero_grad()
@@ -147,18 +159,29 @@ class NODE_WAN_solver:
                     Loss = loss(self.config['alpha'], a, b, c, h, f, g, self.setup, domain, self.device)
                     loss_v = Loss.v(prediction_u, prediction_v, datau, datav)
                     loss_v.backward(retain_graph=True)
-                self.optimizer_v.step()
+                    self.optimizer_v.step()
+
+            # TODO: move back
+            past_l2s = []
+            points = Comb_loader(self.setup['N_r'], self.setup['N_b'], domain, self.device)
+            L2 = L_norm(points.interioru, self.u_net, self.p, self.func_u_sol, domain.V(), self.setup['N_r']).item()
+            past_l2s.append(L2)
+            with open('L2_NODE_'+str(self.setup['dim'])+'.json', 'w') as f:
+                json.dump(past_l2s, f)
+
+            times.append(time.time())
+            with open('Time_NODE_'+str(self.setup['dim'])+'.json', 'w') as f:
+                json.dump(times, f)
 
             if report and k % report_it == 0:
                 lu, lv = loss_u.item(), loss_v.item()
                 print('iteration: ' + str(k), 'Loss u: ' + str(lu), 'Loss v: ' + str(lv))
                 if self.func_u_sol is not None:
-                    points = Comb_loader(self.setup['N_r'], self.setup['N_b'], domain, self.device)
-                    L1 = L_norm(points.interioru, self.u_net, self.p, self.func_u_sol, domain.V(), self.setup['N_r']).item()
-                    print('L^1 norm error: ' + str(L1))
+                    print('L^2 norm error: ' + str(L2))
+
                     # TODO: modify proj to support different number of plots
-                    #proj(self.u_net, self.setup, k, self.device, axes=[0, 1], resolution=200, colours=20, save=False,
-                         #show=show_plt, func_u_sol=self.func_u_sol)
+                    proj(self.u_net, self.setup, k, self.device, axes=[0, 1], resolution=200, colours=20, save=True,
+                         show=show_plt, func_u_sol=self.func_u_sol)
 
             if k == self.iterations:
                 print('Max Iterations Reached')

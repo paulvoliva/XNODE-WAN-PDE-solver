@@ -282,7 +282,7 @@ class Hypercube:
         return dist
 
     def bound_pad(self, x):
-        t = torch.cat((torch.tensor(self.T0).view(1), x[0, :, 0]), dim=0)
+        t = torch.cat((torch.tensor(self.T0).view(1).to(x.device), x[0, :, 0]), dim=0)
         idx, data = fillt(t, self.T, self.T0, self.N_t)
         return None, idx[1:], data
 

@@ -23,7 +23,7 @@ where $x$ is a d-dimensional vector. You specify these functions just below
 
 parser = argparse.ArgumentParser(prog='XNODE-WAN PDE solver',
                                  description='a general purpose parabolic PDE solver using the XNODE-WAN architecture')
-# TODO: implement directory
+
 parser.add_argument('-w', '--work_dir', type=str, default='./', help='directory for the best model parameters')
 
 parser.add_argument('--params', help='an experiment setup to load', required=True)
@@ -33,14 +33,13 @@ parser.add_argument('--report', type=bool, default=True, help='boolean for repor
 parser.add_argument('--report_it', type=int, default=10, help='number of iterations between reporting progress')
 parser.add_argument('--show_plt', type=bool, default=False, help='whether to show plots at report_it intervals')
 
-args = parser.parse_args(['--params', 'cube_pde.yaml', '--funcs', 'cube_pde_funcs'])
-#
-#__import__('configs.' + args.funcs)
+args = parser.parse_args(['--params', 'cube_pde.yaml', '--funcs', 'Ex4_1_funcs'])
+
 funcs = importlib.import_module('configs.'+args.funcs)
 names = [x for x in funcs.__dict__ if not x.startswith("_")]
 globals().update({k: getattr(funcs, k) for k in names[2:]})
 
-with open('NODE_GAN/configs/'+args.params, 'r') as parameters:
+with open('NODE_GAN working/configs/'+args.params, 'r') as parameters:
     params = yaml.safe_load(parameters)
 
 # setting to cuda
@@ -49,5 +48,5 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu') if args.de
 
 
 if __name__ == '__main__':
-    solver = NODE_WAN_solver(params, func_a, func_b, func_c, func_h, func_f, func_g, device, func_u_sol=func_u_sol)
+    solver = NODE_WAN_solver(params, func_a, func_b, func_c, func_h, func_f, func_g, device, args.work_dir, func_u_sol=func_u_sol, p=2, stop=stop)
     solver.train(report=args.report, report_it=args.report_it, show_plt=args.show_plt)
