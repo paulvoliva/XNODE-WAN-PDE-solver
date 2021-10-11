@@ -4,11 +4,13 @@ Due to the curse of dimensionality, solving high dimensional parabolic partial d
 
 In our work, we design a novel so-called XNODE model for a universal and effective representation for the parabolic PDE solution. Built on the neural ODE model, XNODE model is able to incoporate the priori information of the PDEs to the primal netwrok. The proposed hybrid method (XNODE-WAN) by integrating the XNODE model within the WAN framework leads to significant improvement on the performance and efficiency of training. Numerical results show that our method can reduce the training time to a fraction of that of the WAN model. 
 
-More specifically, our XNODE-WAN algorithm aims to solve the following BVP PDE on either time-indepedent or time-varying d-dimensional domain:
+More specifically, our XNODE-WAN algorithm aims to solve the following BVP PDE on either time-indepedent or time-varying d-dimensional domain ![equation](https://latex.codecogs.com/gif.latex?%5Cmathcal%7BD%7D%5Cin%20%5B0%2CT%5D%5Ctimes%20%5Cmathbb%7BR%7D%5Ed):
 
 ![equation](https://latex.codecogs.com/gif.latex?%5Cbegin%7Balign*%7D%20%5Cbegin%7Bcases%7D%20%5Cpartial_t%20u%28t%2C%5Cmathbf%7Bx%7D%29-%5Coverset%7Bd%7D%7B%5Cunderset%7Bi%3D1%7D%7B%5Csum%7D%7D%5Cpartial_i%5CBig%28%5Coverset%7Bd%7D%7B%5Cunderset%7Bi%3D1%7D%7B%5Csum%7D%7Da_%7Bij%7D%28t%2C%5Cmathbf%7Bx%7D%29%20%5Cpartial_ju%28t%2C%5Cmathbf%7Bx%7D%29%5CBig%29&plus;%5Coverset%7Bd%7D%7B%5Cunderset%7Bi%3D1%7D%7B%5Csum%7D%7Db_i%28t%2C%5Cmathbf%7Bx%7D%29%5Cpartial_iu%28t%2C%5Cmathbf%7Bx%7D%5C%29&plus;c%28u%2C%20t%2C%5Cmathbf%7Bx%7D%29-f%28t%2C%5Cmathbf%7Bx%7D%29%3D0%20%26%5Ctext%7B%20for%20%7D%20%28t%2C%20%5Cmathbf%7Bx%7D%29%20%5Cin%20%5Cmathcal%7BD%7D%2C%5C%5C%20u%28t%2C%20%5Cmathbf%7Bx%7D%29%3D%20g%28t%2C%5Cmathbf%7Bx%7D%29%20%26%20%5Ctext%7Bon%20%7D%5Cpartial%20%5Cmathcal%7BD%7D%2C%5C%5C%20u%280%2C%5Cmathbf%7Bx%7D%29-h%28%5Cmathbf%7Bx%7D%29%3D0%20%26%20%5Ctext%7Bon%20%7D%5COmega%280%29%2C%20%5Cend%7Bcases%7D%20%5Cend%7Balign*%7D)
 
-It is also able to handle time-varying domains, denoted  - <img src="https://latex.codecogs.com/gif.latex?\Omega(t) " /> .
+where $\Omega(t):= \{\mathbf{x} | (t, \mathbf{x}) \in \mathcal{D}\}$ denote the spatial domain of $\mathcal{D}$ when restricting time to be $t$.
+
+
 
 This repository is the official implementation of the paper entitled "Towards fast weak adversarial training to solve high dimensional parabolic partial differential equations using XNODE-WAN".
 
