@@ -8,7 +8,7 @@ More specifically, our XNODE-WAN algorithm aims to solve the following BVP PDE:
 
 ![equation](https://latex.codecogs.com/gif.latex?%5Cleft%5C%7B%5Cbegin%7Barray%7D%7Bll%7D%20u_%7Bt%7D-%5Csum_%7Bi%3D1%7D%5Ed%20%5Cpartial_i%20%28%5Csum_%7Bj%3D1%7D%5Ed%20a_%7Bij%7D%20%5Cpartial_j%20u%29%20&plus;%20%5Csum_%7Bi%3D1%7D%5Ed%20b_i%20%5Cpartial_i%20u%20&plus;%20cu%20%3D%20f%2C%20%26%20%5Ctext%20%7B%20in%20%7D%20%5COmega%20%5Ctimes%5B0%2C%20T%5D%20%5C%5C%20u%28x%2C%20t%29%3Dg%28x%2C%20t%29%2C%20%26%20%5Ctext%20%7B%20on%20%7D%20%5Cpartial%20%5COmega%20%5Ctimes%5B0%2C%20T%5D%20%5C%5C%20u%28x%2C%200%29%3Dh%28x%29%2C%20%26%20%5Ctext%20%7B%20in%20%7D%20%5COmega%20%5Cend%7Barray%7D%5Cright.)
 
-for a d-dimensional domain. It is also able to handle time-varying domains, denoted  <img src="https://latex.codecogs.com/gif.latex?\Omega(t) " /> .
+for a d-dimensional domain. It is also able to handle time-varying domains, denoted  -<img src="https://latex.codecogs.com/gif.latex?\Omega(t) " /> .
 
 This repository is the official implementation of the paper entitled "Towards fast weak adversarial training to solve high dimensional parabolic partial differential equations using XNODE-WAN".
 
