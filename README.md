@@ -40,4 +40,4 @@ The algorithm supports a wide variety of domains, including time-varying ones, a
 # Reference papers
 1. [Weak Adversarial Networks for High-dimensional Partial
 Differential Equations](https://arxiv.org/pdf/1907.08272.pdf)
-2. [Solving high-dimensional partial differential equations using deep learning](https://www.pnas.org/content/115/34/8505)
+
