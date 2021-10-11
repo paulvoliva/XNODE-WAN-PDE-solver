@@ -10,6 +10,8 @@ More specifically, our XNODE-WAN algorithm aims to solve the following BVP PDE:
 
 for a d-dimensional domain. It is also able to handle time-varying domains, denoted  -<img src="https://latex.codecogs.com/gif.latex?\Omega(t) " /> .
 
+- <img src="https://latex.codecogs.com/gif.latex?O_t=\text { Onset event at time bin } t " /> 
+
 This repository is the official implementation of the paper entitled "Towards fast weak adversarial training to solve high dimensional parabolic partial differential equations using XNODE-WAN".
 
 # Running Codes
