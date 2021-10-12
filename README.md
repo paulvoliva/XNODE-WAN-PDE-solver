@@ -37,7 +37,7 @@ There are certain complications in evaluating points and therefore the best meth
 # Domains
 The algorithm supports a wide variety of domains, including time-varying ones, and these can be specified in the `dataset.py` file which already contains some examples. It is important to conform to the structure highlighted in this file to guarantee that the algorithm works.
 
-# Reference papers
+# Reference paper
 1. [Weak Adversarial Networks for High-dimensional Partial
 Differential Equations](https://arxiv.org/pdf/1907.08272.pdf)
 
