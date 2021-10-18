@@ -12,7 +12,7 @@ where ![equation](https://latex.codecogs.com/gif.latex?%5COmega%28t%29%3A%3D%20%
 
 
 
-This repository is the official implementation of the paper entitled "Towards fast weak adversarial training to solve high dimensional parabolic partial differential equations using XNODE-WAN".
+This repository is the official implementation of the paper entitled "Towards fast weak adversarial training to solve high dimensional parabolic partial differential equations using XNODE-WAN" ([arxiv](https://arxiv.org/abs/2110.07812)).
 
 # Running Codes
 Requirements for a successful implementation of the codes can be found in `requirements.txt`.
