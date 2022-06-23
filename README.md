@@ -1,5 +1,8 @@
 # Towards fast weak adversarial training to solve high dimensional parabolic partial differential equations using XNODE-WAN
 
+This repository is the official implementation of the paper 
+* P.V. Oliva, Y Wu, C. He and H. Ni, [Towards fast weak adversarial training to solve high dimensional parabolic partial differential equations using XNODE-WAN](https://doi.org/10.1016/j.jcp.2022.111233), *Journal of Computational Physics*, 463 (2022), 111233.
+
 Due to the curse of dimensionality, solving high dimensional parabolic partial differential equations (PDEs) has been a challenging problem for decades. Recently, a weak adversarial network (WAN) proposed in [1] offers a flexible and computationally efficient approach to tackle this problem defined on arbitrary domains by leveraging the weak solution. WAN reformulates the PDE problem as a generative adversarial network, where the weak solution (primal network) and the test function (adversarial network) are parameterized by multi-layer deep neural networks (DNNs). 
 
 In our work, we design a novel so-called XNODE model for a universal and effective representation for the parabolic PDE solution. Built on the neural ODE model, XNODE model is able to incoporate the priori information of the PDEs to the primal netwrok. The proposed hybrid method (XNODE-WAN) by integrating the XNODE model within the WAN framework leads to significant improvement on the performance and efficiency of training. Numerical results show that our method can reduce the training time to a fraction of that of the WAN model. 
@@ -10,9 +13,6 @@ More specifically, our XNODE-WAN algorithm aims to solve the following BVP PDE o
 
 where ![equation](https://latex.codecogs.com/gif.latex?%5COmega%28t%29%3A%3D%20%5C%7B%5Cmathbf%7Bx%7D%20%7C%20%28t%2C%20%5Cmathbf%7Bx%7D%29%20%5Cin%20%5Cmathcal%7BD%7D%5C%7D) denotes the spatial domain of <img src="https://latex.codecogs.com/gif.latex?\mathcal{D}" />  when restricting time to be <img src="https://latex.codecogs.com/gif.latex?t" /> .
 
-
-
-This repository is the official implementation of the paper entitled "Towards fast weak adversarial training to solve high dimensional parabolic partial differential equations using XNODE-WAN" ([arxiv](https://arxiv.org/abs/2110.07812)).
 
 # Running Codes
 Requirements for a successful implementation of the codes can be found in `requirements.txt`.
